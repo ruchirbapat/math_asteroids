@@ -81,22 +81,22 @@ public:
 
 		// Numerals, change to it to have a private member of min and max values
 		short numerals[2] = { static_cast<short>((rand_between(5, 30))), static_cast<short>(rand_between(5, 30)) }; 
-		unsigned char operandType( operands.c_str()[ rand_between<short>(0, operands.length() - 1) ] );
-
+		auto randop = rand_between<short>(0, operands.length() - 1); 
+		std::cout << "operands[" << randop << "] was chosen" << std::endl; 
+		unsigned char operandType( operands.at(randop) );
+		
 		// Sum initialised in initialiser list above
-		std::printf("Asteroid created with %d points and the generated sum is %d%c%d\n", num_points, numerals[0], operandType, numerals[1]);
+		//std::printf("Asteroid created with %d points and the generated sum is %d%c%d\n", num_points, numerals[0], operandType, numerals[1]);
 		switch(operandType) {
 			case '+':
 				answer = numerals[0] + numerals[1];
-				std::cout << "Adding" << std::endl;
+	//			std::cout << "Adding" << std::endl;
 			case '-':
 				answer = numerals[0] - numerals[1];
-				std::cout << "Subtracting" << std::endl;
+	//			std::cout << "Subtracting" << std::endl;
 			case '*':
 				answer = numerals[0] * numerals[1];
-				std::cout << "Multiplying" << std::endl;
-			case '/':
-				answer = numerals[0] / numerals[1]; // DivisionError?
+	//			std::cout << "Multiplying" << std::endl;
 		}
 	}
 	~Asteroid() {};
@@ -162,7 +162,7 @@ int main()
 	ship.scale(10, 10);
 	ship.setOrigin(0.5 * ship.mesh.getGlobalBounds().width / 2, 0.5 * ship.mesh.getGlobalBounds().height / 2);
 	
-	std::string typed_text = "";
+	std::string typed_text = std::string();
 	for(int i = 0; i < 5; i++) {
 		Asteroid* a = new Asteroid();
 		auto w = static_cast<unsigned int>(a->mesh.getGlobalBounds().width);
@@ -192,14 +192,17 @@ int main()
 			if(e.type == sf::Event::EventType::Closed) {
 				window.close(); break;
 
-			} else if(e.type == sf::Event::EventType::TextEntered && isdigit(static_cast<char>(e.text.unicode))) {
-				typed_text += static_cast<char>(e.text.unicode);
+			} else if(e.type == sf::Event::EventType::TextEntered) {
+				char c = static_cast<char>(e.text.unicode);
+				if (isdigit(c)) {
+					typed_text.append(&c);
+				}
 			} else if(e.type == sf::Event::EventType::KeyReleased) {
-				if (e.key.code == sf::Keyboard::Return && (typed_text.length() - 1)){
-					std::cout << "meme: " << typed_text << std::endl;
+				if (e.key.code == sf::Keyboard::Return && !typed_text.empty()){
+					std::cout << "Text: " << typed_text << std::endl;
 					// handle the text entered
 					int sum = std::atoi(typed_text.c_str());
-					typed_text = "";
+					typed_text = std::string();
 					// shoot at meme with sum on it
 					std::cout << "Shot at " << sum << std::endl; // This current throws an error!
 				}
