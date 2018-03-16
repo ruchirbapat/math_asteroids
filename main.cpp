@@ -10,7 +10,6 @@
 #include <SFML/System/Time.hpp>
 
 // Helper function, consider changing to an inline or a C-style macro
-//
 template<typename T>
 inline auto rand_between (T min, T max) { return std::rand() % (max + 1) + min; };
 
