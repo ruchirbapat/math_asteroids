@@ -1,7 +1,7 @@
 .PHONY: all
 
 CC=clang++
-FLAGS=-std=c++14 -O2
+FLAGS=-std=c++17 -O2
 FILES=main.cpp
 OBJ=game
 LIBS=-lsfml-graphics -lsfml-window -lsfml-system

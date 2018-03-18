@@ -9,6 +9,8 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Time.hpp>
 
+#define array_size(a) (sizeof(a)/sizeof(a[0]))
+
 // Helper function, consider changing to an inline or a C-style macro
 template<typename T>
 inline auto rand_between (T min, T max) { return std::rand() % (max + 1) + min; };
@@ -19,6 +21,13 @@ inline auto rand_between (T min, T max) { return std::rand() % (max + 1) + min; 
 // Game constants
 const int WIN_WIDTH = 600;
 const int WIN_HEIGHT = 600;
+
+class MyText : sf::Drawable {
+public:
+	MyText(sf::Text initial_text) : text(initial_text) { };
+	~MyText() { };
+	sf::Text text;
+};
 
 // Forward declare MovingEntity class for the renderables
 class MovingEntity;
@@ -43,7 +52,6 @@ public:
 };
 
 //std::string operands = "+-*/";
-
 #if 0
 	sf::Font f;
 	f.loadFromFile("NimbusRegular.otf");
@@ -56,7 +64,7 @@ public:
 	text.setStyle(sf::Text::Bold);
 #endif
 
-const static std::string operands = "+-*";
+//const static std::string operands = "+-*";
 class Asteroid : public MovingEntity {
 public:
 	Asteroid() : 
@@ -84,27 +92,47 @@ public:
 		auto randop = rand_between<short>(0, operands.length() - 1); 
 		std::cout << "operands[" << randop << "] was chosen" << std::endl; 
 		unsigned char operandType( operands.at(randop) );
+		answer = [=]() -> int {
+			switch(operandType) {
+				case '+':
+					return numerals[0] + numerals[1];
+					break;
+				case '-':
+					return numerals[0] - numerals[1];
+					break;
+				case '*':
+					return numerals[0] * numerals[1];
+					break;
+				default:
+					throw std::runtime_error("Unknown operand chosen!");
+			}
+		}();
 		
+		sf::Font font_face;
+		font_face.loadFromFile("NimbusRegular.otf");
+		text.setFont(font_face);
+		const char* fmt = "%d %c %d";
+		int sz = std::snprintf(nullptr, 0, fmt, numerals[0], operandType, numerals[1]);
+		char* buf = (char*)std::calloc(sz + 1, 1);
+		std::snprintf(buf, sz, fmt, numerals[0], operandType, numerals[1]);
+		text.setString(buf);
+		text.setCharacterSize(12);
+		text.setFillColor(sf::Color::White);
+		text.setStyle(sf::Text::Regular);
+		text.setPosition(((mesh.getPosition().x + mesh.getGlobalBounds().width)/2) - (text.getGlobalBounds().width/2),
+						 ((mesh.getPosition().y + mesh.getGlobalBounds().height)/2) - (text.getGlobalBounds().height/2));
+
+
 		// Sum initialised in initialiser list above
-		//std::printf("Asteroid created with %d points and the generated sum is %d%c%d\n", num_points, numerals[0], operandType, numerals[1]);
-		switch(operandType) {
-			case '+':
-				answer = numerals[0] + numerals[1];
-	//			std::cout << "Adding" << std::endl;
-			case '-':
-				answer = numerals[0] - numerals[1];
-	//			std::cout << "Subtracting" << std::endl;
-			case '*':
-				answer = numerals[0] * numerals[1];
-	//			std::cout << "Multiplying" << std::endl;
-		}
+		std::printf("Asteroid created with %d points and the generated sum is %d %c %d = %d\n", num_points, numerals[0], operandType, numerals[1], answer);
 	}
 	~Asteroid() {};
+	sf::Text text;
 private:
 	int answer;
+	static inline const std::string operands = "+-*";
 	const unsigned short max_points = 6;
 	unsigned short num_points;
-//	static const sf::Font font_face = font_face.loadFromFile("NimbusRegular.otf");
 };
 
 class Spaceship : public MovingEntity {
@@ -153,7 +181,7 @@ int main()
 	sf::Text text;
 	text.setFont(f);
 	text.setString("Math Asteroids");
-	text.setCharacterSize(24);
+	text.setCharacterSize(36);
 	text.setFillColor(sf::Color::White);
 	text.setStyle(sf::Text::Bold);
 	
@@ -215,20 +243,11 @@ int main()
 			direction = 1;
 		} else if(sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
 			direction = -1;
-		}// else if(sf::Keyboard::isKeyPressed(sf::Keyboard::Return)) {
-	//		// handle the text entered
-//			int sum = std::atoi(iftext.c_str());
-//			iftext = "";
-//			// shoot at meme with sum on it
-//			std::cout << "Shot at " << sum << std::endl; // This current throws an error!
-//
-//		}
-		
+		}
 		ship.rotate(direction * ship.rotation_factor);
 		
 		if(sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
 			float abs_rotation = ship.getRotation();
-//			std::cout << "Rotation: " << abs_rotation << std::endl;
 //			sf::Vector2f heading = sf::Vector2f(static_cast<float>(std::cos(2 * M_PI * (abs_rotation / 360))), static_cast<float>(std::sin(2 * M_PI * (abs_rotation / 360))));
 		
 			// Create a normalized vector in the direction of travel
@@ -278,7 +297,7 @@ int main()
 			
 			// Render
 			window.draw(*i);
-		}
+	}
 
 		window.display();
 	}
