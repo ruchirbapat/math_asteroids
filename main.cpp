@@ -6,12 +6,17 @@
 #include <vector>
 #include <cctype>
 #include <stdexcept>
+#include <sstream>
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Time.hpp>
 
+using std::vector;
+using std::cout;
+using std::printf;
+
 #define array_size(a) (sizeof(a)/sizeof(a[0]))
 
-// Helper function, consider changing to an inline or a C-style macro
+// Helper function
 template<typename T>
 inline auto rand_between (T min, T max) { return std::rand() % (max + 1) + min; };
 
@@ -21,13 +26,6 @@ inline auto rand_between (T min, T max) { return std::rand() % (max + 1) + min; 
 // Game constants
 const int WIN_WIDTH = 600;
 const int WIN_HEIGHT = 600;
-
-class MyText : sf::Drawable {
-public:
-	MyText(sf::Text initial_text) : text(initial_text) { };
-	~MyText() { };
-	sf::Text text;
-};
 
 // Forward declare MovingEntity class for the renderables
 class MovingEntity;
@@ -44,25 +42,43 @@ public:
 	sf::Vector2f velocity;
 	const sf::Vector2f max_velocity;
 	const float acceleration;
+	
 	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const {
 		states.transform *= getTransform();
 		target.draw(mesh, states);
 	}
+ 
+	void update(float deltaTime) {
+		// Velocity clamping
+		if(velocity.x > max_velocity.x) {
+			velocity.x = max_velocity.x;
+		}
+		if(velocity.y > max_velocity.y) {
+			velocity.y = max_velocity.y; 
+		}
+		
+		// Move object
+		move(velocity.x * deltaTime, velocity.y * deltaTime);
+
+		// Bounds checking
+		if(getPosition().y <= 0) {
+			setPosition(WIN_WIDTH - getPosition().x, WIN_HEIGHT);
+		} else if (getPosition().y >= WIN_HEIGHT) {
+			setPosition(WIN_HEIGHT - getPosition().x, 0);
+		}
+		if(getPosition().x <= 0) {
+			setPosition(WIN_WIDTH, WIN_HEIGHT - getPosition().y);
+		} else if (getPosition().x >= WIN_WIDTH) {
+			setPosition(0, WIN_HEIGHT - getPosition().y);
+		}
+	}
+
+	void render(sf::RenderWindow& window) {
+		window.draw(*this);
+	}
+
 	std::string name;
 };
-
-//std::string operands = "+-*/";
-#if 0
-	sf::Font f;
-	f.loadFromFile("NimbusRegular.otf");
-
-	sf::Text text;
-	text.setFont(f);
-	text.setString("Math Asteroids");
-	text.setCharacterSize(24);
-	text.setFillColor(sf::Color::White);
-	text.setStyle(sf::Text::Bold);
-#endif
 
 //const static std::string operands = "+-*";
 class Asteroid : public MovingEntity {
@@ -90,7 +106,6 @@ public:
 		// Numerals, change to it to have a private member of min and max values
 		short numerals[2] = { static_cast<short>((rand_between(5, 30))), static_cast<short>(rand_between(5, 30)) }; 
 		auto randop = rand_between<short>(0, operands.length() - 1); 
-		std::cout << "operands[" << randop << "] was chosen" << std::endl; 
 		unsigned char operandType( operands.at(randop) );
 		answer = [=]() -> int {
 			switch(operandType) {
@@ -111,24 +126,33 @@ public:
 		sf::Font font_face;
 		font_face.loadFromFile("NimbusRegular.otf");
 		text.setFont(font_face);
-		const char* fmt = "%d %c %d";
-		int sz = std::snprintf(nullptr, 0, fmt, numerals[0], operandType, numerals[1]);
-		char* buf = (char*)std::calloc(sz + 1, 1);
-		std::snprintf(buf, sz, fmt, numerals[0], operandType, numerals[1]);
-		text.setString(buf);
+		std::stringstream ss;
+		ss << numerals[0] << ' ' << operandType << ' ' << numerals[1];
+		text.setString(ss.str());
 		text.setCharacterSize(12);
 		text.setFillColor(sf::Color::White);
 		text.setStyle(sf::Text::Regular);
 		text.setPosition(((mesh.getPosition().x + mesh.getGlobalBounds().width)/2) - (text.getGlobalBounds().width/2),
 						 ((mesh.getPosition().y + mesh.getGlobalBounds().height)/2) - (text.getGlobalBounds().height/2));
-
-
+		std::cout << text.getString().toAnsiString() << std::endl;
 		// Sum initialised in initialiser list above
-		std::printf("Asteroid created with %d points and the generated sum is %d %c %d = %d\n", num_points, numerals[0], operandType, numerals[1], answer);
+		//std::printf("Asteroid created with %d points and the generated sum is %d %c %d = %d\n", num_points, numerals[0], operandType, numerals[1], answer);
+	}
+
+	virtual void update(float deltaTime) {
+		MovingEntity::update(deltaTime);
+		std::cout << text.getPosition().x << " and changed to ";
+		text.setPosition(((mesh.getPosition().x + mesh.getGlobalBounds().width)/2) - (text.getGlobalBounds().width/2),
+					 ((mesh.getPosition().y + mesh.getGlobalBounds().height)/2) - (text.getGlobalBounds().height/2));
+		std::cout << text.getPosition().x << std::endl;
+	}
+	void render(sf::RenderWindow& window) {
+		MovingEntity::render(window);
+		window.draw(text);
 	}
 	~Asteroid() {};
-	sf::Text text;
 private:
+	sf::Text text;
 	int answer;
 	static inline const std::string operands = "+-*";
 	const unsigned short max_points = 6;
@@ -167,7 +191,7 @@ int main()
  	window.create(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Math Asteroids", sf::Style::Close,
 		[]() -> sf::ContextSettings {
 			sf::ContextSettings s;
-			s.antialiasingLevel = 4;
+			s.antialiasingLevel = 2;
 			return s;
 		}()
 	);
@@ -215,7 +239,7 @@ int main()
 
 		// Capture events
 		sf::Event e;
-		auto deltaTime = deltaTimeMS.asSeconds();
+		float deltaTime = deltaTimeMS.asSeconds();
 		while(window.pollEvent(e)) {
 			if(e.type == sf::Event::EventType::Closed) {
 				window.close(); break;
@@ -272,36 +296,13 @@ int main()
 		// Bounds checking to make sure the ship doesn't go off the screen
 		// TODO: Fix the really obscure and rare case where the ship can stuck at any of the corners if hit perfectly
 		for (auto i : renderables) {
-			// Velocity clamping
-			if(i->velocity.x > i->max_velocity.x) {
-				i->velocity.x = i->max_velocity.x;
-			}
-			if(i->velocity.y > i->max_velocity.y) {
-				i->velocity.y = i->max_velocity.y; 
-			}
-			
-			// Move object
-			i->move(i->velocity.x * deltaTime, i->velocity.y * deltaTime);
-
-			// Bounds checking
-			if(i->getPosition().y <= 0) {
-				i->setPosition(WIN_WIDTH - i->getPosition().x, WIN_HEIGHT);
-			} else if (i->getPosition().y >= WIN_HEIGHT) {
-				i->setPosition(WIN_HEIGHT - i->getPosition().x, 0);
-			}
-			if(i->getPosition().x <= 0) {
-				i->setPosition(WIN_WIDTH, WIN_HEIGHT - i->getPosition().y);
-			} else if (i->getPosition().x >= WIN_WIDTH) {
-				i->setPosition(0, WIN_HEIGHT - i->getPosition().y);
-			}
-			
-			// Render
-			window.draw(*i);
-	}
+			i->update(deltaTime);
+			i->render(window);
+		}
 
 		window.display();
 	}
-	
+
 	std::cout << "\nQuitting successfully... thank you for playing Math Asteroids! :)" << std::endl;
 	// Exit successfully
 	return 0;
