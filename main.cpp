@@ -33,50 +33,33 @@ class MovingEntity;
 //Update this shit to use C++ smart pointers, the fastest one preferably
 static std::vector<MovingEntity*> renderables; 
 
+static sf::Font font_face;
 class MovingEntity : public sf::Transformable, public sf::Drawable {
 public:
-	explicit MovingEntity(sf::Vector2f initial_vel, sf::Vector2f initial_max_vel, const float accel, MovingEntity* child, std::string _name) : velocity(initial_vel), max_velocity(initial_max_vel), acceleration(accel), name(_name) {
+	explicit MovingEntity(sf::Vector2f initial_vel, sf::Vector2f initial_max_vel, const float accel, MovingEntity* child, std::string _name) :
+		velocity(initial_vel), max_velocity(initial_max_vel), textOffset(sf::Vector2f(0, 20)), acceleration(accel),
+		text(sf::Text()), name(_name) {
+
 		::renderables.push_back(child);
+		std::cout << font_face.getInfo().family << std::endl;
+		text.setFont(font_face);
+		text.setCharacterSize(16);
+		text.setFillColor(sf::Color::White);
+		text.setStyle(sf::Text::Regular);
+	
 	};
 	sf::ConvexShape mesh;
 	sf::Vector2f velocity;
 	const sf::Vector2f max_velocity;
+	const sf::Vector2f textOffset;
 	const float acceleration;
-	
+	sf::Text text;
+
 	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const {
 		states.transform *= getTransform();
 		target.draw(mesh, states);
 	}
  
-	void update(float deltaTime) {
-		// Velocity clamping
-		if(velocity.x > max_velocity.x) {
-			velocity.x = max_velocity.x;
-		}
-		if(velocity.y > max_velocity.y) {
-			velocity.y = max_velocity.y; 
-		}
-		
-		// Move object
-		move(velocity.x * deltaTime, velocity.y * deltaTime);
-
-		// Bounds checking
-		if(getPosition().y <= 0) {
-			setPosition(WIN_WIDTH - getPosition().x, WIN_HEIGHT);
-		} else if (getPosition().y >= WIN_HEIGHT) {
-			setPosition(WIN_HEIGHT - getPosition().x, 0);
-		}
-		if(getPosition().x <= 0) {
-			setPosition(WIN_WIDTH, WIN_HEIGHT - getPosition().y);
-		} else if (getPosition().x >= WIN_WIDTH) {
-			setPosition(0, WIN_HEIGHT - getPosition().y);
-		}
-	}
-
-	void render(sf::RenderWindow& window) {
-		window.draw(*this);
-	}
-
 	std::string name;
 };
 
@@ -122,37 +105,20 @@ public:
 					throw std::runtime_error("Unknown operand chosen!");
 			}
 		}();
-		
-		sf::Font font_face;
-		font_face.loadFromFile("NimbusRegular.otf");
-		text.setFont(font_face);
+
 		std::stringstream ss;
 		ss << numerals[0] << ' ' << operandType << ' ' << numerals[1];
 		text.setString(ss.str());
-		text.setCharacterSize(12);
-		text.setFillColor(sf::Color::White);
-		text.setStyle(sf::Text::Regular);
-		text.setPosition(((mesh.getPosition().x + mesh.getGlobalBounds().width)/2) - (text.getGlobalBounds().width/2),
+		/*text.setPosition(((mesh.getPosition().x + mesh.getGlobalBounds().width)/2) - (text.getGlobalBounds().width/2),
 						 ((mesh.getPosition().y + mesh.getGlobalBounds().height)/2) - (text.getGlobalBounds().height/2));
+		*/
 		std::cout << text.getString().toAnsiString() << std::endl;
 		// Sum initialised in initialiser list above
 		//std::printf("Asteroid created with %d points and the generated sum is %d %c %d = %d\n", num_points, numerals[0], operandType, numerals[1], answer);
 	}
 
-	virtual void update(float deltaTime) {
-		MovingEntity::update(deltaTime);
-		std::cout << text.getPosition().x << " and changed to ";
-		text.setPosition(((mesh.getPosition().x + mesh.getGlobalBounds().width)/2) - (text.getGlobalBounds().width/2),
-					 ((mesh.getPosition().y + mesh.getGlobalBounds().height)/2) - (text.getGlobalBounds().height/2));
-		std::cout << text.getPosition().x << std::endl;
-	}
-	void render(sf::RenderWindow& window) {
-		MovingEntity::render(window);
-		window.draw(text);
-	}
 	~Asteroid() {};
 private:
-	sf::Text text;
 	int answer;
 	static inline const std::string operands = "+-*";
 	const unsigned short max_points = 6;
@@ -174,12 +140,14 @@ public:
 		mesh.setOutlineColor(sf::Color::White);
 		mesh.setOutlineThickness(0.1f);
 		mesh.setPosition(0, 0);
+		
+		text.setString("You");
 	}
 	~Spaceship() {};
 	static void reset_position();
 	const float rotation_factor;
-//	sf::Vector2f velocity; // adds onto the inherited position
 };
+
 // Linker entry-point
 int main()
 {
@@ -199,21 +167,20 @@ int main()
 	// Enable Vsync
 	window.setVerticalSyncEnabled(true);
 		
-	sf::Font f;
-	f.loadFromFile("NimbusRegular.otf");
+	font_face.loadFromFile("NimbusRegular.otf");
 
 	sf::Text text;
-	text.setFont(f);
+	text.setFont(font_face);
 	text.setString("Math Asteroids");
 	text.setCharacterSize(36);
 	text.setFillColor(sf::Color::White);
 	text.setStyle(sf::Text::Bold);
-	
+
 	Spaceship ship;
 	ship.setPosition(WIN_WIDTH/2, WIN_HEIGHT/2);
 	ship.scale(10, 10);
 	ship.setOrigin(0.5 * ship.mesh.getGlobalBounds().width / 2, 0.5 * ship.mesh.getGlobalBounds().height / 2);
-	
+
 	std::string typed_text = std::string();
 	for(int i = 0; i < 5; i++) {
 		Asteroid* a = new Asteroid();
@@ -293,11 +260,37 @@ int main()
 		
 		window.draw(text);
 
-		// Bounds checking to make sure the ship doesn't go off the screen
 		// TODO: Fix the really obscure and rare case where the ship can stuck at any of the corners if hit perfectly
 		for (auto i : renderables) {
-			i->update(deltaTime);
-			i->render(window);
+			// Velocity clamping
+			if(i->velocity.x > i->max_velocity.x) {
+				i->velocity.x = i->max_velocity.x;
+			}
+			if(i->velocity.y > i->max_velocity.y) {
+				i->velocity.y = i->max_velocity.y; 
+			}
+			
+			// Move object
+			i->move(i->velocity * deltaTime);
+
+			// Bounds checking
+			if(i->getPosition().y <= 0) {
+				i->setPosition(WIN_WIDTH - i->getPosition().x, WIN_HEIGHT);
+			} else if (i->getPosition().y >= WIN_HEIGHT) {
+				i->setPosition(WIN_HEIGHT - i->getPosition().x, 0);
+			}
+			if(i->getPosition().x <= 0) {
+				i->setPosition(WIN_WIDTH, WIN_HEIGHT - i->getPosition().y);
+			} else if (i->getPosition().x >= WIN_WIDTH) {
+				i->setPosition(0, WIN_HEIGHT - i->getPosition().y);
+			}
+			
+			//i->text.setPosition((i->mesh.getPosition().x + i->mesh.getGlobalBounds().width)/2,
+			//					((i->mesh.getPosition().y + i->mesh.getGlobalBounds().height)/2) + i->textOffset.y);
+			i->text.setPosition(i->getPosition().x, i->getPosition().y);
+//			std::printf("Text %s for %s is at (%f, %f)\n", i->text.getString().toAnsiString().c_str(), i->name.c_str(), i->text.getPosition().x, i->text.getPosition().y);
+			window.draw(i->text);
+			window.draw(*i);
 		}
 
 		window.display();
