@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <vector>
+#include <unordered_map>
 #include <cctype>
 #include <stdexcept>
 #include <sstream>
@@ -63,6 +64,9 @@ public:
 	std::string name;
 };
 
+class Asteroid;
+static std::unordered_map<int, Asteroid*> asteroid_lut;
+
 //const static std::string operands = "+-*";
 class Asteroid : public MovingEntity {
 public:
@@ -105,6 +109,8 @@ public:
 					throw std::runtime_error("Unknown operand chosen!");
 			}
 		}();
+
+		asteroid_lut[answer] = this;
 
 		std::stringstream ss;
 		ss << numerals[0] << ' ' << operandType << ' ' << numerals[1];
@@ -159,7 +165,7 @@ int main()
  	window.create(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Math Asteroids", sf::Style::Close,
 		[]() -> sf::ContextSettings {
 			sf::ContextSettings s;
-			s.antialiasingLevel = 2;
+			s.antialiasingLevel = 8;
 			return s;
 		}()
 	);
@@ -214,14 +220,20 @@ int main()
 			} else if(e.type == sf::Event::EventType::TextEntered) {
 				char c = static_cast<char>(e.text.unicode);
 				if (isdigit(c)) {
-					typed_text.append(&c);
+					typed_text += c;
 				}
+				std::cout << "Char enetered: " << e.text.unicode << std::endl;
 			} else if(e.type == sf::Event::EventType::KeyReleased) {
 				if (e.key.code == sf::Keyboard::Return && !typed_text.empty()){
 					std::cout << "Text: " << typed_text << std::endl;
 					// handle the text entered
 					int sum = std::atoi(typed_text.c_str());
 					typed_text = std::string();
+					
+					if(asteroid_lut.find(sum) != asteroid_lut.end()) {
+						delete asteroid_lut[sum];
+					}
+
 					// shoot at meme with sum on it
 					std::cout << "Shot at " << sum << std::endl; // This current throws an error!
 				}
@@ -285,9 +297,8 @@ int main()
 				i->setPosition(0, WIN_HEIGHT - i->getPosition().y);
 			}
 			
-			//i->text.setPosition((i->mesh.getPosition().x + i->mesh.getGlobalBounds().width)/2,
-			//					((i->mesh.getPosition().y + i->mesh.getGlobalBounds().height)/2) + i->textOffset.y);
-			i->text.setPosition(i->getPosition().x, i->getPosition().y);
+			i->text.setPosition(i->getPosition().x + (i->mesh.getGlobalBounds().width / 2), i->getPosition().y + (i->mesh.getGlobalBounds().height) + i->textOffset.y);
+		//	i->text.setPosition(i->getPosition().x, i->getPosition().y);
 //			std::printf("Text %s for %s is at (%f, %f)\n", i->text.getString().toAnsiString().c_str(), i->name.c_str(), i->text.getPosition().x, i->text.getPosition().y);
 			window.draw(i->text);
 			window.draw(*i);
