@@ -12,4 +12,7 @@ build:
 run:
 	./$(OBJ)
 
+backup:
+	python backup.py
+
 all: build run

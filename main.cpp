@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <vector>
+#include <list>
 #include <unordered_map>
 #include <cctype>
 #include <stdexcept>
@@ -32,7 +33,7 @@ const int WIN_HEIGHT = 600;
 class MovingEntity;
 
 //Update this shit to use C++ smart pointers, the fastest one preferably
-static std::vector<MovingEntity*> renderables; 
+static std::list<MovingEntity*> renderables; 
 
 static sf::Font font_face;
 class MovingEntity : public sf::Transformable, public sf::Drawable {
@@ -42,7 +43,6 @@ public:
 		text(sf::Text()), name(_name) {
 
 		::renderables.push_back(child);
-		std::cout << font_face.getInfo().family << std::endl;
 		text.setFont(font_face);
 		text.setCharacterSize(16);
 		text.setFillColor(sf::Color::White);
@@ -118,7 +118,6 @@ public:
 		/*text.setPosition(((mesh.getPosition().x + mesh.getGlobalBounds().width)/2) - (text.getGlobalBounds().width/2),
 						 ((mesh.getPosition().y + mesh.getGlobalBounds().height)/2) - (text.getGlobalBounds().height/2));
 		*/
-		std::cout << text.getString().toAnsiString() << std::endl;
 		// Sum initialised in initialiser list above
 		//std::printf("Asteroid created with %d points and the generated sum is %d %c %d = %d\n", num_points, numerals[0], operandType, numerals[1], answer);
 	}
@@ -188,6 +187,8 @@ int main()
 	ship.setOrigin(0.5 * ship.mesh.getGlobalBounds().width / 2, 0.5 * ship.mesh.getGlobalBounds().height / 2);
 
 	std::string typed_text = std::string();
+	short text_sign = 1;
+
 	for(int i = 0; i < 5; i++) {
 		Asteroid* a = new Asteroid();
 		auto w = static_cast<unsigned int>(a->mesh.getGlobalBounds().width);
@@ -221,16 +222,24 @@ int main()
 				char c = static_cast<char>(e.text.unicode);
 				if (isdigit(c)) {
 					typed_text += c;
+				} else if (c == '-') {
+					text_sign *= -1;
 				}
 				std::cout << "Char enetered: " << e.text.unicode << std::endl;
 			} else if(e.type == sf::Event::EventType::KeyReleased) {
 				if (e.key.code == sf::Keyboard::Return && !typed_text.empty()){
 					std::cout << "Text: " << typed_text << std::endl;
 					// handle the text entered
-					int sum = std::atoi(typed_text.c_str());
-					typed_text = std::string();
+					int sum = text_sign * std::atoi(typed_text.c_str());
 					
+					// Reset text string and text sign (1 or -1)
+					typed_text = std::string();
+					text_sign = 1;
+					
+					// Destroy the appropriate asteroid
 					if(asteroid_lut.find(sum) != asteroid_lut.end()) {
+						renderables.remove(asteroid_lut[sum]);
+						asteroid_lut[sum] = nullptr;
 						delete asteroid_lut[sum];
 					}
 
@@ -303,7 +312,7 @@ int main()
 			window.draw(i->text);
 			window.draw(*i);
 		}
-
+		std::cout << "Velocity: " << renderables[0].velocity << std::endl;
 		window.display();
 	}
 
