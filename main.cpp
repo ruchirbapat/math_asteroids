@@ -280,7 +280,7 @@ int main()
     	ship.velocity.y = ship.velocity.y - ship.velocity.y * dragFactor;
 		
 		window.draw(text);
-
+		
 		// TODO: Fix the really obscure and rare case where the ship can stuck at any of the corners if hit perfectly
 		for (auto i : renderables) {
 			// Velocity clamping
@@ -312,8 +312,8 @@ int main()
 			window.draw(i->text);
 			window.draw(*i);
 		}
-		std::cout << "Velocity: " << renderables[0].velocity << std::endl;
 		window.display();
+//		std::cout << renderables.front()->velocity.x << ", " << renderables.front()->velocity.y << std::endl;
 	}
 
 	std::cout << "\nQuitting successfully... thank you for playing Math Asteroids! :)" << std::endl;
