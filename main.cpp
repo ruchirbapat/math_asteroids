@@ -9,6 +9,7 @@
 #include <cctype>
 #include <stdexcept>
 #include <sstream>
+#include <thread>
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Time.hpp>
 
@@ -17,6 +18,8 @@ using std::cout;
 using std::printf;
 
 #define array_size(a) (sizeof(a)/sizeof(a[0]))
+
+#define lerp(a, b, t) ((a * (1-t)) + (b*t))
 
 // Helper function
 template<typename T>
@@ -91,7 +94,7 @@ public:
 		mesh.setOutlineThickness(0.1f);
 
 		// Numerals, change to it to have a private member of min and max values
-		short numerals[2] = { static_cast<short>((rand_between(5, 30))), static_cast<short>(rand_between(5, 30)) }; 
+		short numerals[2] = { static_cast<short>((rand_between(1, 15))), static_cast<short>(rand_between(1, 15)) }; 
 		auto randop = rand_between<short>(0, operands.length() - 1); 
 		unsigned char operandType( operands.at(randop) );
 		answer = [=]() -> int {
@@ -125,10 +128,11 @@ public:
 	~Asteroid() {};
 private:
 	int answer;
-	static inline const std::string operands = "+-*";
+	static std::string operands;//  = "+-*";
 	const unsigned short max_points = 6;
 	unsigned short num_points;
 };
+std::string Asteroid::operands = "+-*";
 
 class Spaceship : public MovingEntity {
 public:
@@ -153,6 +157,17 @@ public:
 	const float rotation_factor;
 };
 
+#if 0
+class Bullet : public MovingEntity {
+public:
+	explicit MovingEntity(sf::Vector2f initial_vel, sf::Vector2f initial_max_vel, const float accel, MovingEntity* child, std::string _name) :
+	Bullet() : MovingEntity({
+
+	}
+	~Bullet() { }
+};
+#endif
+
 // Linker entry-point
 int main()
 {
@@ -164,7 +179,7 @@ int main()
  	window.create(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Math Asteroids", sf::Style::Close,
 		[]() -> sf::ContextSettings {
 			sf::ContextSettings s;
-			s.antialiasingLevel = 8;
+			s.antialiasingLevel = 4;
 			return s;
 		}()
 	);
@@ -225,7 +240,7 @@ int main()
 				} else if (c == '-') {
 					text_sign *= -1;
 				}
-				std::cout << "Char enetered: " << e.text.unicode << std::endl;
+				std::cout << "Char entered: " << e.text.unicode << std::endl;
 			} else if(e.type == sf::Event::EventType::KeyReleased) {
 				if (e.key.code == sf::Keyboard::Return && !typed_text.empty()){
 					std::cout << "Text: " << typed_text << std::endl;
@@ -236,12 +251,23 @@ int main()
 					typed_text = std::string();
 					text_sign = 1;
 					
+					
 					// Destroy the appropriate asteroid
 					if(asteroid_lut.find(sum) != asteroid_lut.end()) {
+						auto angle = atan2(asteroid_lut[sum]->getPosition().y - ship.getPosition().y, 
+										   asteroid_lut[sum]->getPosition().x - ship.getPosition().x) * RAD2DEG;
+					
+						ship.setRotation(angle + 90);
 						renderables.remove(asteroid_lut[sum]);
 						asteroid_lut[sum] = nullptr;
 						delete asteroid_lut[sum];
 					}
+				
+					/*
+					for(float t = 0; t <= 1; t += 0.001) {
+						ship.rota
+						}
+					*/
 
 					// shoot at meme with sum on it
 					std::cout << "Shot at " << sum << std::endl; // This current throws an error!
@@ -296,14 +322,18 @@ int main()
 
 			// Bounds checking
 			if(i->getPosition().y <= 0) {
-				i->setPosition(WIN_WIDTH - i->getPosition().x, WIN_HEIGHT);
+//				i->setPosition(WIN_WIDTH - i->getPosition().x, WIN_HEIGHT);
+				i->setPosition(i->getPosition().x, WIN_HEIGHT);
 			} else if (i->getPosition().y >= WIN_HEIGHT) {
-				i->setPosition(WIN_HEIGHT - i->getPosition().x, 0);
+//				i->setPosition(WIN_HEIGHT - i->getPosition().x, 0);
+				i->setPosition(i->getPosition().x, 0);
 			}
 			if(i->getPosition().x <= 0) {
-				i->setPosition(WIN_WIDTH, WIN_HEIGHT - i->getPosition().y);
+//				i->setPosition(WIN_WIDTH, WIN_HEIGHT - i->getPosition().y);
+				i->setPosition(WIN_WIDTH, i->getPosition().y);
 			} else if (i->getPosition().x >= WIN_WIDTH) {
-				i->setPosition(0, WIN_HEIGHT - i->getPosition().y);
+//				i->setPosition(0, WIN_HEIGHT - i->getPosition().y);
+				i->setPosition(0, i->getPosition().y);
 			}
 			
 			i->text.setPosition(i->getPosition().x + (i->mesh.getGlobalBounds().width / 2), i->getPosition().y + (i->mesh.getGlobalBounds().height) + i->textOffset.y);
