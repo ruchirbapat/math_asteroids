@@ -31,6 +31,7 @@ inline auto rand_between (T min, T max) { return std::rand() % (max + 1) + min; 
 // Game constants
 const int WIN_WIDTH = 600;
 const int WIN_HEIGHT = 600;
+bool onMenu = false;
 
 // Forward declare MovingEntity class for the renderables
 class MovingEntity;
@@ -42,30 +43,69 @@ static sf::Font font_face;
 class MovingEntity : public sf::Transformable, public sf::Drawable {
 public:
 	explicit MovingEntity(sf::Vector2f initial_vel, sf::Vector2f initial_max_vel, const float accel, MovingEntity* child, std::string _name) :
-		velocity(initial_vel), max_velocity(initial_max_vel), textOffset(sf::Vector2f(0, 20)), acceleration(accel),
-		text(sf::Text()), name(_name) {
+		velocity(initial_vel), max_velocity(initial_max_vel), acceleration(accel),
+		/*text(sf::Text()),*/ name(_name) {
 
 		::renderables.push_back(child);
+		/*
 		text.setFont(font_face);
 		text.setCharacterSize(16);
 		text.setFillColor(sf::Color::White);
 		text.setStyle(sf::Text::Regular);
+		*/
 	
 	};
 	sf::ConvexShape mesh;
 	sf::Vector2f velocity;
 	const sf::Vector2f max_velocity;
-	const sf::Vector2f textOffset;
+//	const sf::Vector2f textOffset;
 	const float acceleration;
-	sf::Text text;
+//	sf::Text text;
 
-	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const {
+	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+		std::cout << "MovingEntity::draw() called on " << name << std::endl;
 		states.transform *= getTransform();
 		target.draw(mesh, states);
+	}
+
+	virtual void Tick(float deltaTime) {
+		// Velocity clamping
+		std::cout << "MovingEntity::Tick() called on " << name << std::endl;
+		if(velocity.x > max_velocity.x) {
+			velocity.x = max_velocity.x;
+		}
+		if(velocity.y > max_velocity.y) {
+			velocity.y = max_velocity.y; 
+		}
+		
+		// Move object
+		move(velocity * deltaTime);
+
+		// Bounds checking
+		if(getPosition().y <= 0) {
+			setPosition(getPosition().x, WIN_HEIGHT);
+		} else if (getPosition().y >= WIN_HEIGHT) {
+			setPosition(getPosition().x, 0);
+		}
+		if(getPosition().x <= 0) {
+			setPosition(WIN_WIDTH, getPosition().y);
+		} else if (getPosition().x >= WIN_WIDTH) {
+			setPosition(0, getPosition().y);
+		}
 	}
  
 	std::string name;
 };
+
+#if 0
+class MovingEntitywText : public MovingEntity {
+	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+		target.draw(my_text);
+	}
+private:
+	sf::Text my_text;
+};
+#endif 
 
 class Asteroid;
 static std::unordered_map<int, Asteroid*> asteroid_lut;
@@ -75,7 +115,7 @@ class Asteroid : public MovingEntity {
 public:
 	Asteroid() : 
 		MovingEntity(sf::Vector2f(0, 0), sf::Vector2f(50, 50), 0.0f, this, "Asteroid"), // Base constructor first
-		answer(0), num_points( rand_between<short>(5, max_points) )
+		answer(0), num_points( rand_between<short>(5, max_points) ), text(sf::Text())
 	{
 		// Muh procedural asteroid generation
 		// TODO: use line rendering rather than a small thickness
@@ -114,23 +154,36 @@ public:
 		}();
 
 		asteroid_lut[answer] = this;
-
 		std::stringstream ss;
 		ss << numerals[0] << ' ' << operandType << ' ' << numerals[1];
 		text.setString(ss.str());
-		/*text.setPosition(((mesh.getPosition().x + mesh.getGlobalBounds().width)/2) - (text.getGlobalBounds().width/2),
-						 ((mesh.getPosition().y + mesh.getGlobalBounds().height)/2) - (text.getGlobalBounds().height/2));
-		*/
-		// Sum initialised in initialiser list above
-		//std::printf("Asteroid created with %d points and the generated sum is %d %c %d = %d\n", num_points, numerals[0], operandType, numerals[1], answer);
+		std::cout << "text: " << text.getString().toAnsiString() << std::endl;
 	}
 
-	~Asteroid() {};
+	virtual void Tick(float deltaTime) override {
+		MovingEntity::Tick(deltaTime);
+		std::cout << "Asteroid::Tick() called" << std::endl;
+		text.setPosition(getPosition().x + (mesh.getGlobalBounds().width / 2), getPosition().y + (mesh.getGlobalBounds().height) + textOffset.y);
+	}
+
+	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+//		MovingEntity::draw(target, states);
+		states.transform *= getTransform();
+		target.draw(mesh, states);
+		std::cout << "Asteroid::draw() called: " << text.getString().toAnsiString() << " on target: " << &target << std::endl;
+		target.draw(text, states);
+	}
+
+	~Asteroid() {
+		asteroid_lut[answer] = nullptr;
+	}
 private:
 	int answer;
 	static std::string operands;//  = "+-*";
 	const unsigned short max_points = 6;
 	unsigned short num_points;
+	sf::Text text;
+	const sf::Vector2f textOffset = sf::Vector2f(0, 20);
 };
 std::string Asteroid::operands = "+-*";
 
@@ -149,24 +202,39 @@ public:
 		mesh.setOutlineColor(sf::Color::White);
 		mesh.setOutlineThickness(0.1f);
 		mesh.setPosition(0, 0);
-		
-		text.setString("You");
 	}
 	~Spaceship() {};
 	static void reset_position();
 	const float rotation_factor;
 };
 
-#if 0
-class Bullet : public MovingEntity {
-public:
-	explicit MovingEntity(sf::Vector2f initial_vel, sf::Vector2f initial_max_vel, const float accel, MovingEntity* child, std::string _name) :
-	Bullet() : MovingEntity({
-
-	}
-	~Bullet() { }
+enum class button_state {
+	hover,
+	clicked,
+	normal
 };
-#endif
+
+class Button : public sf::Drawable, public sf::Transformable {
+public:
+
+	// Default constructor
+	Button(sf::Vector2f pos, sf::Vector2f scale, sf::Text show_text) : btn_text(show_text) {
+		this->setPosition(pos);
+		this->setScale(scale);
+	}
+
+	// Copy constructor
+	Button(Button& btn) : btn_text(btn.btn_text) {
+		this->setPosition(btn.getPosition());
+		this->setScale(btn.getScale());
+	}
+
+	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const {
+	}
+
+private:
+	sf::Text btn_text;
+};
 
 // Linker entry-point
 int main()
@@ -183,18 +251,31 @@ int main()
 			return s;
 		}()
 	);
+	
+	std::cout << "Window: " << &window << std::endl;
 
 	// Enable Vsync
 	window.setVerticalSyncEnabled(true);
 		
 	font_face.loadFromFile("NimbusRegular.otf");
-
+	
+	sf::Text menuTitle;
+	menuTitle.setFont(font_face);
+	menuTitle.setString("MATH ASTEROIDS");
+	menuTitle.setCharacterSize(60);
+	menuTitle.setFillColor(sf::Color::White);
+	menuTitle.setStyle(sf::Text::Bold);
+	menuTitle.setOrigin(menuTitle.getGlobalBounds().width / 2, menuTitle.getGlobalBounds().height / 2);
+	menuTitle.setPosition(WIN_WIDTH / 2, (WIN_HEIGHT / 2) - menuTitle.getGlobalBounds().height);
+	
+#if 0
 	sf::Text text;
 	text.setFont(font_face);
 	text.setString("Math Asteroids");
 	text.setCharacterSize(36);
 	text.setFillColor(sf::Color::White);
 	text.setStyle(sf::Text::Bold);
+#endif
 
 	Spaceship ship;
 	ship.setPosition(WIN_WIDTH/2, WIN_HEIGHT/2);
@@ -204,7 +285,7 @@ int main()
 	std::string typed_text = std::string();
 	short text_sign = 1;
 
-	for(int i = 0; i < 5; i++) {
+	for(int i = 0; i < 2; i++) {
 		Asteroid* a = new Asteroid();
 		auto w = static_cast<unsigned int>(a->mesh.getGlobalBounds().width);
 		auto h = static_cast<unsigned int>(a->mesh.getGlobalBounds().height);
@@ -219,7 +300,6 @@ int main()
 	sf::Time lastTime = sf::microseconds(0);
 	sf::Clock clock;
 	
-	// Add custom callbacks
 	// Main event loop
 	while(window.isOpen()) {
 		window.clear();
@@ -229,121 +309,130 @@ int main()
 		// Capture events
 		sf::Event e;
 		float deltaTime = deltaTimeMS.asSeconds();
-		while(window.pollEvent(e)) {
-			if(e.type == sf::Event::EventType::Closed) {
-				window.close(); break;
+		if(!onMenu) {
+			while(window.pollEvent(e)) {
+				if(e.type == sf::Event::EventType::Closed) {
+					window.close(); break;
 
-			} else if(e.type == sf::Event::EventType::TextEntered) {
-				char c = static_cast<char>(e.text.unicode);
-				if (isdigit(c)) {
-					typed_text += c;
-				} else if (c == '-') {
-					text_sign *= -1;
-				}
-				std::cout << "Char entered: " << e.text.unicode << std::endl;
-			} else if(e.type == sf::Event::EventType::KeyReleased) {
-				if (e.key.code == sf::Keyboard::Return && !typed_text.empty()){
-					std::cout << "Text: " << typed_text << std::endl;
-					// handle the text entered
-					int sum = text_sign * std::atoi(typed_text.c_str());
-					
-					// Reset text string and text sign (1 or -1)
-					typed_text = std::string();
-					text_sign = 1;
-					
-					
-					// Destroy the appropriate asteroid
-					if(asteroid_lut.find(sum) != asteroid_lut.end()) {
-						auto angle = atan2(asteroid_lut[sum]->getPosition().y - ship.getPosition().y, 
-										   asteroid_lut[sum]->getPosition().x - ship.getPosition().x) * RAD2DEG;
-					
-						ship.setRotation(angle + 90);
-						renderables.remove(asteroid_lut[sum]);
-						asteroid_lut[sum] = nullptr;
-						delete asteroid_lut[sum];
+				} if(e.type == sf::Event::EventType::TextEntered) {
+					char c = static_cast<char>(e.text.unicode);
+					if (isdigit(c)) {
+						typed_text += c;
+					} else if (c == '-') {
+						text_sign *= -1;
 					}
-				
-					/*
-					for(float t = 0; t <= 1; t += 0.001) {
-						ship.rota
+					std::cout << "Char entered: " << e.text.unicode << std::endl;
+				} else if(e.type == sf::Event::EventType::KeyReleased) {
+					if (e.key.code == sf::Keyboard::Return && !typed_text.empty()){
+						std::cout << "Text: " << typed_text << std::endl;
+						// handle the text entered
+						int sum = text_sign * std::atoi(typed_text.c_str());
+						
+						// Reset text string and text sign (1 or -1)
+						typed_text = std::string();
+						text_sign = 1;
+						
+						// Destroy the appropriate asteroid
+						if(asteroid_lut.find(sum) != asteroid_lut.end()) {
+							auto asteroid = asteroid_lut[sum];
+							auto angle = atan2((asteroid->getPosition().y + asteroid->velocity.y) - ship.getPosition().y, 
+											   (asteroid->getPosition().x + asteroid->velocity.x)- ship.getPosition().x) * RAD2DEG;
+						
+							ship.setRotation(angle + 90);
+							sf::VertexArray bullet_ray(sf::Lines, 2);
+							bullet_ray[0].position = ship.mesh.getPoint(0);
+							bullet_ray[1].position = asteroid->getPosition() + asteroid->velocity;
+							bullet_ray[0].color = sf::Color::Red;
+							bullet_ray[1].color = sf::Color::Red;
+							
+							for(float t = 0; t <= 1; t += 0.001) {
+								
+							}
+
+							renderables.remove(asteroid_lut[sum]);
+							delete asteroid_lut[sum];
 						}
-					*/
+					
+						/*
+						for(float t = 0; t <= 1; t += 0.001) {
+							ship.rota
+							}
+						*/
 
-					// shoot at meme with sum on it
-					std::cout << "Shot at " << sum << std::endl; // This current throws an error!
+						// shoot at meme with sum on it
+						std::cout << "Shot at " << sum << std::endl; // This current throws an error!
+					}
 				}
+				// End of checking the event type
+			} // End of event polling
+		
+			int direction = 0;
+			if(sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
+				direction = 1;
+			} else if(sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
+				direction = -1;
 			}
-			// End of checking the event type
-		} // End of event polling
-	
-		int direction = 0;
-		if(sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
-			direction = 1;
-		} else if(sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
-			direction = -1;
-		}
-		ship.rotate(direction * ship.rotation_factor);
-		
-		if(sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
-			float abs_rotation = ship.getRotation();
-//			sf::Vector2f heading = sf::Vector2f(static_cast<float>(std::cos(2 * M_PI * (abs_rotation / 360))), static_cast<float>(std::sin(2 * M_PI * (abs_rotation / 360))));
-		
-			// Create a normalized vector in the direction of travel
-			float xN = static_cast<float>(sin(2 * M_PI * (abs_rotation / 360)));
-			float yN = static_cast<float>(cos(2 * M_PI * (abs_rotation / 360)));
+			ship.rotate(direction * ship.rotation_factor);
+			
+			if(sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
+				float abs_rotation = ship.getRotation();
+	//			sf::Vector2f heading = sf::Vector2f(static_cast<float>(std::cos(2 * M_PI * (abs_rotation / 360))), static_cast<float>(std::sin(2 * M_PI * (abs_rotation / 360))));
+			
+				// Create a normalized vector in the direction of travel
+				float xN = static_cast<float>(sin(2 * M_PI * (abs_rotation / 360)));
+				float yN = static_cast<float>(cos(2 * M_PI * (abs_rotation / 360)));
 
-			// Add to velocity vector (using minus for y because of coordinate system)
-			ship.velocity.x += xN * ship.acceleration;
-			ship.velocity.y -= yN * ship.acceleration;
-
-		}
-		
-		// Drag or wind or some shit
-		const float dragFactor = 0.0001;
-
-		// Use Stokes' law to apply drag to the ship
-    	ship.velocity.x = ship.velocity.x - ship.velocity.x * dragFactor;
-    	ship.velocity.y = ship.velocity.y - ship.velocity.y * dragFactor;
-		
-		window.draw(text);
-		
-		// TODO: Fix the really obscure and rare case where the ship can stuck at any of the corners if hit perfectly
-		for (auto i : renderables) {
-			// Velocity clamping
-			if(i->velocity.x > i->max_velocity.x) {
-				i->velocity.x = i->max_velocity.x;
-			}
-			if(i->velocity.y > i->max_velocity.y) {
-				i->velocity.y = i->max_velocity.y; 
+				// Add to velocity vector (using minus for y because of coordinate system)
+				ship.velocity.x += xN * ship.acceleration;
+				ship.velocity.y -= yN * ship.acceleration;
 			}
 			
-			// Move object
-			i->move(i->velocity * deltaTime);
+			// Drag or wind or some shit
+			const float dragFactor = 0.0001;
 
-			// Bounds checking
-			if(i->getPosition().y <= 0) {
-//				i->setPosition(WIN_WIDTH - i->getPosition().x, WIN_HEIGHT);
-				i->setPosition(i->getPosition().x, WIN_HEIGHT);
-			} else if (i->getPosition().y >= WIN_HEIGHT) {
-//				i->setPosition(WIN_HEIGHT - i->getPosition().x, 0);
-				i->setPosition(i->getPosition().x, 0);
-			}
-			if(i->getPosition().x <= 0) {
-//				i->setPosition(WIN_WIDTH, WIN_HEIGHT - i->getPosition().y);
-				i->setPosition(WIN_WIDTH, i->getPosition().y);
-			} else if (i->getPosition().x >= WIN_WIDTH) {
-//				i->setPosition(0, WIN_HEIGHT - i->getPosition().y);
-				i->setPosition(0, i->getPosition().y);
-			}
+			// Use Stokes' law to apply drag to the ship
+			ship.velocity.x = ship.velocity.x - ship.velocity.x * dragFactor;
+			ship.velocity.y = ship.velocity.y - ship.velocity.y * dragFactor;
 			
-			i->text.setPosition(i->getPosition().x + (i->mesh.getGlobalBounds().width / 2), i->getPosition().y + (i->mesh.getGlobalBounds().height) + i->textOffset.y);
-		//	i->text.setPosition(i->getPosition().x, i->getPosition().y);
-//			std::printf("Text %s for %s is at (%f, %f)\n", i->text.getString().toAnsiString().c_str(), i->name.c_str(), i->text.getPosition().x, i->text.getPosition().y);
-			window.draw(i->text);
-			window.draw(*i);
+			// TODO: Fix the really obscure and rare case where the ship can stuck at any of the corners if hit perfectly
+			for (auto i : renderables) {
+#if 0
+				// Velocity clamping
+				if(i->velocity.x > i->max_velocity.x) {
+					i->velocity.x = i->max_velocity.x;
+				}
+				if(i->velocity.y > i->max_velocity.y) {
+					i->velocity.y = i->max_velocity.y; 
+				}
+				
+				// Move object
+				i->move(i->velocity * deltaTime);
+
+				// Bounds checking
+				if(i->getPosition().y <= 0) {
+					i->setPosition(i->getPosition().x, WIN_HEIGHT);
+				} else if (i->getPosition().y >= WIN_HEIGHT) {
+					i->setPosition(i->getPosition().x, 0);
+				}
+				if(i->getPosition().x <= 0) {
+					i->setPosition(WIN_WIDTH, i->getPosition().y);
+				} else if (i->getPosition().x >= WIN_WIDTH) {
+					i->setPosition(0, i->getPosition().y);
+				}
+				
+				i->text.setPosition(i->getPosition().x + (i->mesh.getGlobalBounds().width / 2), i->getPosition().y + (i->mesh.getGlobalBounds().height) + i->textOffset.y);
+				window.draw(i->text);
+				window.draw(*i);
+#endif		
+				i->Tick(deltaTime);
+				window.draw(*i);
+				std::putc('\n', stdout);
+			}
+		} else { // On menu
+			window.draw(menuTitle);
 		}
+
 		window.display();
-//		std::cout << renderables.front()->velocity.x << ", " << renderables.front()->velocity.y << std::endl;
 	}
 
 	std::cout << "\nQuitting successfully... thank you for playing Math Asteroids! :)" << std::endl;
