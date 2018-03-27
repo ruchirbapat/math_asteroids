@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <thread>
+#include <tuple>
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Time.hpp>
 
@@ -63,14 +64,12 @@ public:
 //	sf::Text text;
 
 	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
-		std::cout << "MovingEntity::draw() called on " << name << std::endl;
 		states.transform *= getTransform();
 		target.draw(mesh, states);
 	}
 
 	virtual void Tick(float deltaTime) {
 		// Velocity clamping
-		std::cout << "MovingEntity::Tick() called on " << name << std::endl;
 		if(velocity.x > max_velocity.x) {
 			velocity.x = max_velocity.x;
 		}
@@ -96,16 +95,6 @@ public:
  
 	std::string name;
 };
-
-#if 0
-class MovingEntitywText : public MovingEntity {
-	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
-		target.draw(my_text);
-	}
-private:
-	sf::Text my_text;
-};
-#endif 
 
 class Asteroid;
 static std::unordered_map<int, Asteroid*> asteroid_lut;
@@ -156,21 +145,20 @@ public:
 		asteroid_lut[answer] = this;
 		std::stringstream ss;
 		ss << numerals[0] << ' ' << operandType << ' ' << numerals[1];
+		text.setFont(font_face);
 		text.setString(ss.str());
-		std::cout << "text: " << text.getString().toAnsiString() << std::endl;
+		text.setCharacterSize(20);
+		text.setFillColor(sf::Color::White);
+		text.setStyle(sf::Text::Regular);
 	}
 
 	virtual void Tick(float deltaTime) override {
 		MovingEntity::Tick(deltaTime);
-		std::cout << "Asteroid::Tick() called" << std::endl;
 		text.setPosition(getPosition().x + (mesh.getGlobalBounds().width / 2), getPosition().y + (mesh.getGlobalBounds().height) + textOffset.y);
 	}
 
 	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
-//		MovingEntity::draw(target, states);
-		states.transform *= getTransform();
-		target.draw(mesh, states);
-		std::cout << "Asteroid::draw() called: " << text.getString().toAnsiString() << " on target: " << &target << std::endl;
+		MovingEntity::draw(target, states);
 		target.draw(text, states);
 	}
 
@@ -208,6 +196,22 @@ public:
 	const float rotation_factor;
 };
 
+class Bullet : public MovingEntity {
+public:
+	Bullet(std::tuple<sf::Vector2f, sf::Vector2f> ray_points) :
+		MovingEntity(sf::Vector2f(0, 0) /* may want to change this later*/, sf::Vector2f(50, 50), 3.0f, this, "Bullet") // Base constructor
+		{
+	
+		mesh.setPointCount(2);
+		mesh.setPoint(0, std::get<0>(ray_points));
+		mesh.setPoint(1, std::get<1>(ray_points));
+		mesh.setFillColor(sf::Color(0, 0, 0, 0));
+		mesh.setOutlineColor(sf::Color::White);
+		mesh.setOutlineThickness(0.1f);
+
+	}
+};
+
 enum class button_state {
 	hover,
 	clicked,
@@ -229,7 +233,7 @@ public:
 		this->setScale(btn.getScale());
 	}
 
-	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const {
+	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
 	}
 
 private:
@@ -252,8 +256,6 @@ int main()
 		}()
 	);
 	
-	std::cout << "Window: " << &window << std::endl;
-
 	// Enable Vsync
 	window.setVerticalSyncEnabled(true);
 		
@@ -396,37 +398,8 @@ int main()
 			
 			// TODO: Fix the really obscure and rare case where the ship can stuck at any of the corners if hit perfectly
 			for (auto i : renderables) {
-#if 0
-				// Velocity clamping
-				if(i->velocity.x > i->max_velocity.x) {
-					i->velocity.x = i->max_velocity.x;
-				}
-				if(i->velocity.y > i->max_velocity.y) {
-					i->velocity.y = i->max_velocity.y; 
-				}
-				
-				// Move object
-				i->move(i->velocity * deltaTime);
-
-				// Bounds checking
-				if(i->getPosition().y <= 0) {
-					i->setPosition(i->getPosition().x, WIN_HEIGHT);
-				} else if (i->getPosition().y >= WIN_HEIGHT) {
-					i->setPosition(i->getPosition().x, 0);
-				}
-				if(i->getPosition().x <= 0) {
-					i->setPosition(WIN_WIDTH, i->getPosition().y);
-				} else if (i->getPosition().x >= WIN_WIDTH) {
-					i->setPosition(0, i->getPosition().y);
-				}
-				
-				i->text.setPosition(i->getPosition().x + (i->mesh.getGlobalBounds().width / 2), i->getPosition().y + (i->mesh.getGlobalBounds().height) + i->textOffset.y);
-				window.draw(i->text);
-				window.draw(*i);
-#endif		
 				i->Tick(deltaTime);
 				window.draw(*i);
-				std::putc('\n', stdout);
 			}
 		} else { // On menu
 			window.draw(menuTitle);
