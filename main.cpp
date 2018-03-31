@@ -3,16 +3,16 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
-#include <vector>
 #include <list>
 #include <unordered_map>
 #include <cctype>
 #include <stdexcept>
 #include <sstream>
-#include <thread>
 #include <tuple>
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Time.hpp>
+#include <Box2D/Box2D.h>
+#include "Collision.h"
 
 using std::vector;
 using std::cout;
@@ -28,6 +28,7 @@ inline auto rand_between (T min, T max) { return std::rand() % (max + 1) + min; 
 
 #define DEG2RAD (M_PI/180)
 #define RAD2DEG (180/M_PI)
+#define b2v2(vec2) (b2Vec2(vec2.x, vec2.y))
 
 // Game constants
 const int WIN_WIDTH = 600;
@@ -40,28 +41,39 @@ class MovingEntity;
 //Update this shit to use C++ smart pointers, the fastest one preferably
 static std::list<MovingEntity*> renderables; 
 
+static float worldScale = 1;
+static b2World world(b2Vec2(0, 0));
+
 static sf::Font font_face;
 class MovingEntity : public sf::Transformable, public sf::Drawable {
 public:
 	explicit MovingEntity(sf::Vector2f initial_vel, sf::Vector2f initial_max_vel, const float accel, MovingEntity* child, std::string _name) :
-		velocity(initial_vel), max_velocity(initial_max_vel), acceleration(accel),
-		/*text(sf::Text()),*/ name(_name) {
-
-		::renderables.push_back(child);
-		/*
-		text.setFont(font_face);
-		text.setCharacterSize(16);
-		text.setFillColor(sf::Color::White);
-		text.setStyle(sf::Text::Regular);
-		*/
-	
+		velocity(initial_vel), max_velocity(initial_max_vel), acceleration(accel), body(nullptr),
+		name(_name) {
+		
+			::renderables.push_back(child);
 	};
 	sf::ConvexShape mesh;
 	sf::Vector2f velocity;
 	const sf::Vector2f max_velocity;
-//	const sf::Vector2f textOffset;
 	const float acceleration;
-//	sf::Text text;
+	b2Body* body;
+
+	void MakeBody() {
+		b2BodyDef bodyDef;
+		bodyDef.type = b2BodyType::b2_dynamicBody;
+		bodyDef.position.Set(getPosition().x / worldScale, getPosition().y / worldScale);
+		body = world.CreateBody(&bodyDef);
+
+		b2PolygonShape polygonShape;
+		polygonShape.SetAsBox(mesh.getLocalBounds().width / 2 / worldScale, mesh.getLocalBounds().height / 2 / worldScale);
+
+		b2FixtureDef fixtureDef;
+		fixtureDef.shape = &polygonShape;
+		fixtureDef.density = 1;
+		fixtureDef.friction = 0.3f;
+		body->CreateFixture(&fixtureDef);
+	}
 
 	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
 		states.transform *= getTransform();
@@ -76,9 +88,15 @@ public:
 		if(velocity.y > max_velocity.y) {
 			velocity.y = max_velocity.y; 
 		}
-		
+
 		// Move object
-		move(velocity * deltaTime);
+//		move(velocity * deltaTime);
+		b2Vec2 cur_pos = b2v2(getPosition());
+		cur_pos += b2v2(velocity);
+		cur_pos *= deltaTime;
+		body->SetTransform(cur_pos, getRotation());
+		
+		setPosition(body->GetPosition().x * worldScale, body->GetPosition().y * worldScale);
 
 		// Bounds checking
 		if(getPosition().y <= 0) {
@@ -91,6 +109,11 @@ public:
 		} else if (getPosition().x >= WIN_WIDTH) {
 			setPosition(0, getPosition().y);
 		}
+	}
+
+	virtual ~MovingEntity() {
+		std::cout << "Called destructor on " << name << std::endl;
+		renderables.remove(this);
 	}
  
 	std::string name;
@@ -150,6 +173,8 @@ public:
 		text.setCharacterSize(20);
 		text.setFillColor(sf::Color::White);
 		text.setStyle(sf::Text::Regular);
+
+		MakeBody();
 	}
 
 	virtual void Tick(float deltaTime) override {
@@ -180,7 +205,7 @@ public:
 	// Spaceship constructor
 	Spaceship() : 
 		MovingEntity(sf::Vector2f(0, 0), sf::Vector2f(75, 75), 3.0f, this, "Spaceship"), // Base constructor members
-		rotation_factor(6.0f) { // This class's members
+		rotation_factor(6.0f), health_text(sf::Text()) { // This class's members
 		mesh.setPointCount(4);
 		mesh.setPoint(0, sf::Vector2f(1, 0));
 		mesh.setPoint(1, sf::Vector2f(2, 2));
@@ -190,26 +215,75 @@ public:
 		mesh.setOutlineColor(sf::Color::White);
 		mesh.setOutlineThickness(0.1f);
 		mesh.setPosition(0, 0);
+	
+		ss.clear();
+		ss << health << ' ' << "HP";
+		health_text.setFont(font_face);
+		health_text.setString(ss.str());
+		health_text.setCharacterSize(20);
+		health_text.setFillColor(sf::Color::White);
+		health_text.setStyle(sf::Text::Regular);
+
+		MakeBody();
 	}
+
+	virtual void Tick(float deltaTime) override {
+		MovingEntity::Tick(deltaTime);
+		if(health != prev_health) {
+			ss.str("");
+			ss.clear();
+			ss << health << ' ' << "HP";
+			health_text.setString(ss.str());
+		}
+
+		health_text.setPosition(getPosition().x + (mesh.getGlobalBounds().width / 2), getPosition().y + (mesh.getGlobalBounds().height) + textOffset.y);
+
+	}
+
+	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+		MovingEntity::draw(target, states);
+		target.draw(health_text, states);
+	}
+	
+	inline void TakeDamage(unsigned short damage) {
+		health -= damage;
+		prev_health = damage;
+	}
+	
 	~Spaceship() {};
 	static void reset_position();
 	const float rotation_factor;
+private:
+	int health = 100;
+	int prev_health = 100;
+	std::stringstream ss;
+	sf::Text health_text;
+	const sf::Vector2f textOffset = sf::Vector2f(20, 20);
 };
 
 class Bullet : public MovingEntity {
 public:
 	Bullet(std::tuple<sf::Vector2f, sf::Vector2f> ray_points) :
-		MovingEntity(sf::Vector2f(0, 0) /* may want to change this later*/, sf::Vector2f(50, 50), 3.0f, this, "Bullet") // Base constructor
-		{
-	
+		MovingEntity(sf::Vector2f(0, 0) /* may want to change this later*/, sf::Vector2f(50, 50), 3.0f, this, "Bullet"), // Base constructor
+		final_point(std::get<1>(ray_points))
+	{
 		mesh.setPointCount(2);
 		mesh.setPoint(0, std::get<0>(ray_points));
-		mesh.setPoint(1, std::get<1>(ray_points));
-		mesh.setFillColor(sf::Color(0, 0, 0, 0));
-		mesh.setOutlineColor(sf::Color::White);
+		mesh.setPoint(1, std::get<0>(ray_points));
+		mesh.setFillColor(sf::Color::White);
+		mesh.setOutlineColor(sf::Color::Red);
 		mesh.setOutlineThickness(0.1f);
-
 	}
+
+	virtual void Tick(float deltaTime) override {
+		
+	}
+
+private:
+	sf::Vector2f final_point;
+	const float speed = .5f;
+	float step = 5;
+	sf::Vector2f move_by;
 };
 
 enum class button_state {
@@ -234,6 +308,7 @@ public:
 	}
 
 	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+
 	}
 
 private:
@@ -258,7 +333,7 @@ int main()
 	
 	// Enable Vsync
 	window.setVerticalSyncEnabled(true);
-		
+
 	font_face.loadFromFile("NimbusRegular.otf");
 	
 	sf::Text menuTitle;
@@ -269,15 +344,6 @@ int main()
 	menuTitle.setStyle(sf::Text::Bold);
 	menuTitle.setOrigin(menuTitle.getGlobalBounds().width / 2, menuTitle.getGlobalBounds().height / 2);
 	menuTitle.setPosition(WIN_WIDTH / 2, (WIN_HEIGHT / 2) - menuTitle.getGlobalBounds().height);
-	
-#if 0
-	sf::Text text;
-	text.setFont(font_face);
-	text.setString("Math Asteroids");
-	text.setCharacterSize(36);
-	text.setFillColor(sf::Color::White);
-	text.setStyle(sf::Text::Bold);
-#endif
 
 	Spaceship ship;
 	ship.setPosition(WIN_WIDTH/2, WIN_HEIGHT/2);
@@ -287,7 +353,7 @@ int main()
 	std::string typed_text = std::string();
 	short text_sign = 1;
 
-	for(int i = 0; i < 2; i++) {
+	for(int i = 0; i < 3; i++) {
 		Asteroid* a = new Asteroid();
 		auto w = static_cast<unsigned int>(a->mesh.getGlobalBounds().width);
 		auto h = static_cast<unsigned int>(a->mesh.getGlobalBounds().height);
@@ -316,7 +382,9 @@ int main()
 				if(e.type == sf::Event::EventType::Closed) {
 					window.close(); break;
 
-				} if(e.type == sf::Event::EventType::TextEntered) {
+				} 
+				
+				else if(e.type == sf::Event::EventType::TextEntered) {
 					char c = static_cast<char>(e.text.unicode);
 					if (isdigit(c)) {
 						typed_text += c;
@@ -341,17 +409,16 @@ int main()
 											   (asteroid->getPosition().x + asteroid->velocity.x)- ship.getPosition().x) * RAD2DEG;
 						
 							ship.setRotation(angle + 90);
+						#if 0
 							sf::VertexArray bullet_ray(sf::Lines, 2);
 							bullet_ray[0].position = ship.mesh.getPoint(0);
 							bullet_ray[1].position = asteroid->getPosition() + asteroid->velocity;
 							bullet_ray[0].color = sf::Color::Red;
 							bullet_ray[1].color = sf::Color::Red;
-							
-							for(float t = 0; t <= 1; t += 0.001) {
-								
-							}
+						#endif
 
-							renderables.remove(asteroid_lut[sum]);
+							Bullet* b = new Bullet(std::make_tuple(ship.mesh.getPoint(0), asteroid->getPosition() + asteroid->velocity));
+
 							delete asteroid_lut[sum];
 						}
 					
@@ -390,12 +457,15 @@ int main()
 			}
 			
 			// Drag or wind or some shit
-			const float dragFactor = 0.0001;
+			const float dragFactor = 0.01;
 
 			// Use Stokes' law to apply drag to the ship
 			ship.velocity.x = ship.velocity.x - ship.velocity.x * dragFactor;
 			ship.velocity.y = ship.velocity.y - ship.velocity.y * dragFactor;
-			
+	
+			ship.body->SetLinearVelocity(b2v2(ship.velocity));
+			world.Step(deltaTime, 8, 3);
+
 			// TODO: Fix the really obscure and rare case where the ship can stuck at any of the corners if hit perfectly
 			for (auto i : renderables) {
 				i->Tick(deltaTime);
@@ -406,6 +476,7 @@ int main()
 		}
 
 		window.display();
+
 	}
 
 	std::cout << "\nQuitting successfully... thank you for playing Math Asteroids! :)" << std::endl;

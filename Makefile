@@ -1,13 +1,14 @@
 .PHONY: all
 
 CC=g++
-FLAGS=-std=c++17 -O3
-FILES=main.cpp
+#OPT=-O3
+FLAGS=-std=c++17 -g
+FILES=Collision.cpp main.cpp
 OBJ=game
-LIBS=-lsfml-graphics -lsfml-window -lsfml-system
+LIBS=-lsfml-graphics -lsfml-window -lsfml-system -lBox2D
 
 build:
-	$(CC) $(FLAGS) $(FILES) -o $(OBJ) $(LIBS)
+	$(CC) $(FLAGS) $(OPT) $(FILES) -o $(OBJ) $(LIBS)
 
 run:
 	./$(OBJ)
