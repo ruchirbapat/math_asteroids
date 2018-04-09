@@ -28,11 +28,14 @@ namespace cstar {
 	namespace GameManager {
 		static short sum_high = 1;
 		static short sum_low = 15;
+		static unsigned int asteroid_count = 0;
+		static const unsigned int target_asteroid_count = 20;
+		static float asteroid_delay = 0;
+		static const float target_asteroid_delay = 5;
 	}
 
 	// Helper function
-	template<typename T>
-	inline auto rand_between(T min, T max) { return std::rand() % (max + 1) + min; };
+	inline short rand_between(short min, short max) { return static_cast<short>(std::rand() % (max + 1) + min); };
 
 	inline auto perp_distance(sf::Vector2f line_start, sf::Vector2f line_end, sf::Vector2f point) {
 		double normalLength = hypot(line_end.x - line_start.x, line_end.y - line_start.y);
@@ -155,7 +158,7 @@ namespace cstar {
 		public:
 			Asteroid() :
 				MovingEntity(sf::Vector2f(0, 0), sf::Vector2f(50, 50), 0.0f, this, "Asteroid"), // Base constructor first
-				answer(0), num_points(rand_between<short>(5, max_points)), text(sf::Text())
+				answer(0), num_points(rand_between(5, max_points)), text(sf::Text())
 		{
 			sf::ConvexShape* mesh = new sf::ConvexShape();
 			// Muh procedural asteroid generation
@@ -175,8 +178,9 @@ namespace cstar {
 			mesh->setOutlineThickness(0.1f);
 
 			// Numerals, change to it to have a private member of min and max values
-			short numerals[2] = { static_cast<short>((rand_between(1, 15))), static_cast<short>(rand_between(1, 15)) };
-			auto randop = rand_between<short>(0, operands.length() - 1);
+			short numerals[2] = { rand_between(GameManager::sum_low, GameManager::sum_high), 
+								  rand_between(GameManager::sum_low, GameManager::sum_high) };
+			short randop = rand_between(0, operands.length() - 1);
 			unsigned char operandType(operands.at(randop));
 			answer = [=]() -> int {
 				switch (operandType) {
@@ -204,8 +208,8 @@ namespace cstar {
 			text.setCharacterSize(20);
 			text.setFillColor(sf::Color::White);
 			text.setStyle(sf::Text::Regular);
-
-			//MakeBody();
+			
+			GameManager::asteroid_count++;
 		}
 
 			virtual void Tick(float deltaTime) override {
@@ -220,6 +224,7 @@ namespace cstar {
 
 			~Asteroid() {
 				asteroid_lut[answer] = nullptr;
+				cstar::GameManager::asteroid_count--;
 			}
 		private:
 			int answer;
@@ -401,22 +406,21 @@ namespace cstar {
 
 			bool window_intersects(const sf::RenderWindow* win) {
 
-//				sf::Vector2<int> mouse_coords = win->mapPixelToCoords(sf::Vector2f(sf::Mouse::getPosition().x, sf::Mouse::getPosition().y));
-				
 				sf::FloatRect mouse_box;
 				mouse_box.width = 1;
 				mouse_box.height = 1;
 				mouse_box.left = sf::Mouse::getPosition(*win).x;
 				mouse_box.top = sf::Mouse::getPosition(*win).y;
 
-				bool ret = mouse_box.intersects(mesh.getGlobalBounds());
-				print("retting: " << ret);
-				return ret;
+				return mouse_box.intersects(mesh.getGlobalBounds());
 			}
 
 			void Tick(const sf::RenderWindow* win, bool clicked) {
 				// Check for intersections
 				set_state(window_intersects(win) ? (clicked ? button_state::clicked : button_state::hovered) : button_state::neither);
+				if(clicked) {
+					on_click_function();
+				}
 				update_style();
 				mesh.setFillColor(state_style.fill_colour);
 				text.setFillColor(state_style.text_colour);
@@ -450,7 +454,7 @@ int main()
 	window.create(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Math Asteroids", sf::Style::Close,
 			[]() -> sf::ContextSettings {
 			sf::ContextSettings s;
-			s.antialiasingLevel = 4;
+			s.antialiasingLevel = 2;
 			return s;
 			}());
 
@@ -472,11 +476,23 @@ int main()
 	menuTitle.setPosition(WIN_WIDTH / 2, menuTitle.getGlobalBounds().height / 2);
 
 	// Buttons and their callbacks
-	auto easy_mode_callback = []() -> void { cstar::GameManager::sum_low = 1; cstar::GameManager::sum_high = 15; };
+	auto easy_mode_callback = []() -> void { 
+		cstar::GameManager::sum_low = 1; 
+		cstar::GameManager::sum_high = 15; 
+		onMenu = false;
+		print("Easy mode selected.");
+	};
 	Button* easy_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2) - 50), sf::Vector2f(100, 50), "EASY");
+	easy_button->SetOnClick(easy_mode_callback);
 
-	auto hard_mode_callback = []() -> void { cstar::GameManager::sum_low = 5; cstar::GameManager::sum_high = 20; };
+	auto hard_mode_callback = []() -> void { 
+		cstar::GameManager::sum_low = 30; 
+		cstar::GameManager::sum_high = 50; 
+		onMenu = false;
+		print("Hard mode selected");
+	};
 	Button* hard_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2) + 50), sf::Vector2f(100, 50), "HARD");
+	hard_button->SetOnClick(hard_mode_callback);
 
 	// Load player assets
 	sf::Texture ship_texture;
@@ -500,7 +516,8 @@ int main()
 	cstar::button_colours[cstar::button_state::hovered] = cstar::button_style{ sf::Color::White, sf::Color::Black };
 	cstar::button_colours[cstar::button_state::clicked] = cstar::button_style{ sf::Color::Red, sf::Color::White };
 
-	for (int i = 0; i < 1; i++) {
+#if 0
+	for (int i = 0; i < 0; i++) {
 		Asteroid* a = new Asteroid();
 		auto w = static_cast<unsigned int>(a->meshPtr->getGlobalBounds().width);
 		auto h = static_cast<unsigned int>(a->meshPtr->getGlobalBounds().height);
@@ -510,6 +527,7 @@ int main()
 		a->scale(5, 5);
 		a->velocity = sf::Vector2f(-1 * 50, -1 * 50);
 	}
+#endif 
 
 	// Clock has started!
 	sf::Time lastTime = sf::microseconds(0);
@@ -526,6 +544,30 @@ int main()
 		sf::Event e;
 		float deltaTime = deltaTimeMS.asSeconds();
 		if (!onMenu) {
+hansali:
+			if(cstar::GameManager::asteroid_count < cstar::GameManager::target_asteroid_count) {
+				print("Asteroid count: " << GameManager::asteroid_count << "\nTarget count: " << GameManager::target_asteroid_count);
+				if(cstar::GameManager::asteroid_delay < cstar::GameManager::target_asteroid_delay) {
+					cstar::GameManager::asteroid_delay += deltaTime;
+					print(GameManager::asteroid_delay);
+				} else  {
+
+					Asteroid* a = new Asteroid();
+					auto w = static_cast<unsigned int>(a->meshPtr->getGlobalBounds().width);
+					auto h = static_cast<unsigned int>(a->meshPtr->getGlobalBounds().height);
+					unsigned int x;
+					unsigned int y;
+					do {
+						x = std::rand() % (WIN_WIDTH - w) + w;
+						y = std::rand() % (WIN_HEIGHT - h) + h;
+					} while((x == ship.getPosition().x) || (y == ship.getPosition().y));
+					a->setPosition(x, y);
+					a->scale(5, 5);
+					a->velocity = sf::Vector2f(rand_between(-50, 50), rand_between(-50, 50));
+					cstar::GameManager::asteroid_delay = 0;
+				}
+			}
+
 			while (window.pollEvent(e)) {
 				if (e.type == sf::Event::EventType::Closed) {
 					window.close(); break;
@@ -540,7 +582,7 @@ int main()
 					else if (c == '-') {
 						text_sign *= -1;
 					}
-					std::cout << "Char entered: " << e.text.unicode << std::endl;
+					std::cout << "Char entered: " << (char)e.text.unicode << std::endl;
 				}
 				else if (e.type == sf::Event::EventType::KeyReleased) {
 					if (e.key.code == sf::Keyboard::Return && !typed_text.empty()) {
@@ -615,12 +657,10 @@ int main()
 		}
 		else { // On menu
 			window.draw(menuTitle);
-
 			while (window.pollEvent(e)) {
 				if (e.type == sf::Event::EventType::Closed) {
 					window.close(); break;
-				}
-				// End of checking the event type
+				} // End of checking the event type
 			} // End of event polling
 			
 			for (auto i : gui_buttons) {
