@@ -31,7 +31,7 @@ namespace cstar {
 		static unsigned int asteroid_count = 0;
 		static const unsigned int target_asteroid_count = 20;
 		static float asteroid_delay = 0;
-		static const float target_asteroid_delay = 5;
+		static const float target_asteroid_delay = 5; // This is in seconds
 	}
 
 	// Helper function
@@ -176,7 +176,8 @@ namespace cstar {
 			mesh->setFillColor(sf::Color(0, 0, 0, 0));
 			mesh->setOutlineColor(sf::Color::White);
 			mesh->setOutlineThickness(0.1f);
-
+			
+			print("Generating between " << GameManager::sum_low << " and " << GameManager::sum_high);
 			// Numerals, change to it to have a private member of min and max values
 			short numerals[2] = { rand_between(GameManager::sum_low, GameManager::sum_high), 
 								  rand_between(GameManager::sum_low, GameManager::sum_high) };
@@ -411,7 +412,7 @@ namespace cstar {
 				mouse_box.height = 1;
 				mouse_box.left = sf::Mouse::getPosition(*win).x;
 				mouse_box.top = sf::Mouse::getPosition(*win).y;
-
+				
 				return mouse_box.intersects(mesh.getGlobalBounds());
 			}
 
@@ -419,7 +420,8 @@ namespace cstar {
 				// Check for intersections
 				set_state(window_intersects(win) ? (clicked ? button_state::clicked : button_state::hovered) : button_state::neither);
 				if(clicked) {
-					on_click_function();
+					this->on_click_function();
+					print("Clicked on " << text.getString().toAnsiString());
 				}
 				update_style();
 				mesh.setFillColor(state_style.fill_colour);
@@ -458,7 +460,7 @@ int main()
 			return s;
 			}());
 
-	sf::RenderWindow* win_ptr = &window;
+	const sf::RenderWindow* win_ptr = &window;
 
 	// Enable Vsync
 	window.setVerticalSyncEnabled(true);
@@ -478,7 +480,7 @@ int main()
 	// Buttons and their callbacks
 	auto easy_mode_callback = []() -> void { 
 		cstar::GameManager::sum_low = 1; 
-		cstar::GameManager::sum_high = 15; 
+		cstar::GameManager::sum_high = 12; 
 		onMenu = false;
 		print("Easy mode selected.");
 	};
@@ -486,8 +488,8 @@ int main()
 	easy_button->SetOnClick(easy_mode_callback);
 
 	auto hard_mode_callback = []() -> void { 
-		cstar::GameManager::sum_low = 30; 
-		cstar::GameManager::sum_high = 50; 
+		cstar::GameManager::sum_low = 15; 
+		cstar::GameManager::sum_high = 30; 
 		onMenu = false;
 		print("Hard mode selected");
 	};
@@ -546,10 +548,8 @@ int main()
 		if (!onMenu) {
 hansali:
 			if(cstar::GameManager::asteroid_count < cstar::GameManager::target_asteroid_count) {
-				print("Asteroid count: " << GameManager::asteroid_count << "\nTarget count: " << GameManager::target_asteroid_count);
 				if(cstar::GameManager::asteroid_delay < cstar::GameManager::target_asteroid_delay) {
 					cstar::GameManager::asteroid_delay += deltaTime;
-					print(GameManager::asteroid_delay);
 				} else  {
 
 					Asteroid* a = new Asteroid();
