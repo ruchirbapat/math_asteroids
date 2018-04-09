@@ -3,12 +3,15 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
-#include <list>
+#include <vector>
 #include <unordered_map>
+#include <algorithm>
+#include <iterator>
 #include <cctype>
 #include <stdexcept>
 #include <sstream>
 #include <tuple>
+#include <functional>
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Time.hpp>
 
@@ -16,15 +19,27 @@ using std::vector;
 using std::cout;
 using std::printf;
 
-#define M_PI (3.14159265)
 #define array_size(a) (sizeof(a)/sizeof(a[0]))
 #define lerp(a, b, t) ((a * (1-t)) + (b*t))
 
 namespace cstar {
+
+	namespace GameManager {
+		static short sum_high = 1;
+		static short sum_low = 15;
+	}
+
 	// Helper function
 	template<typename T>
 	inline auto rand_between(T min, T max) { return std::rand() % (max + 1) + min; };
 
+	inline auto perp_distance(sf::Vector2f line_start, sf::Vector2f line_end, sf::Vector2f point) {
+		double normalLength = hypot(line_end.x - line_start.x, line_end.y - line_start.y);
+		double distance = (double)((point.x - line_start.x) * (line_end.y - line_start.y) - (point.y - line_start.y) * (line_end.x - line_start.x)) / normalLength;
+		return std::abs(distance);
+	}
+
+#define M_PI (3.14159265)
 #define DEG2RAD (M_PI/180)
 #define RAD2DEG (180/M_PI)
 #define b2v2(vec2) (b2Vec2(vec2.x, vec2.y))
@@ -32,13 +47,13 @@ namespace cstar {
 	// Game constants
 	const int WIN_WIDTH = 600;
 	const int WIN_HEIGHT = 600;
-	bool onMenu = false;
+	bool onMenu = true;
 
 	// Forward declare MovingEntity class for the renderables
 	class MovingEntity;
 
 	//Update this shit to use C++ smart pointers, the fastest one preferably
-	static std::list<MovingEntity*> renderables;
+	static std::vector<MovingEntity*> renderables;
 
 	//static float worldScale = 1;
 	//static b2World world(b2Vec2(0, 0));
@@ -119,7 +134,14 @@ namespace cstar {
 		virtual ~MovingEntity() {
 			std::cout << "Called destructor on " << name << std::endl;
 			delete meshPtr;
-			renderables.remove(this);
+
+			std::find(renderables.begin(), renderables.end(), this) - renderables.begin();
+
+			std::vector<MovingEntity*>::iterator iterator_index = std::find(renderables.begin(),
+				renderables.end(),
+				this);
+
+			renderables.erase(iterator_index);
 		}
 
 		std::string name;
@@ -264,10 +286,10 @@ namespace cstar {
 		}
 
 		virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
-			
+
 			// Drawing of mesh turned off
-			//MovingEntity::draw(target, states);
-			
+			MovingEntity::draw(target, states);
+
 			// Draw sprite and HP
 			target.draw(sprite, states);
 			target.draw(health_text, states);
@@ -292,6 +314,15 @@ namespace cstar {
 			sprite.setScale((radius / getScale().x) * 0.75, (radius / getScale().y) * 0.75);
 			sprite.setRotation(getRotation());
 			sprite.setPosition(getPosition());
+		}
+
+		inline short GetRadius() {
+			return radius;
+		}
+
+		inline auto SetRadius(short rad) {
+			radius = rad;
+			return radius;
 		}
 
 		~Spaceship() {};
@@ -334,6 +365,104 @@ namespace cstar {
 		float step = 5;
 		sf::Vector2f move_by;
 	};
+
+	struct button_style {
+		sf::Color fill_colour;
+		sf::Color text_colour;
+	};
+
+	// Forward declarations
+	class Button;
+	enum class button_state;
+
+	static std::unordered_map<button_state,button_style> button_colours;
+	static std::vector<Button*> gui_buttons;
+
+	enum class button_state {
+		hovered,
+		clicked,
+		none
+	};
+
+	class Button : sf::Transformable, public sf::Drawable {
+	public:
+		Button(sf::Vector2f initial_pos, sf::Vector2f initial_scale, std::string button_string) : text(sf::Text()), current_state(cstar::button_state::none), state_style(), 
+			on_click_function(nullptr)
+		{
+			mesh = sf::RectangleShape(initial_scale);
+			
+			mesh.setFillColor(state_style.fill_colour);
+			mesh.setOutlineColor(sf::Color::White);
+			mesh.setOutlineThickness(1);
+			mesh.setOrigin(mesh.getGlobalBounds().width / 2, mesh.getGlobalBounds().height / 2);
+			mesh.setPosition(initial_pos);
+
+			text.setFont(font_face);
+			text.setString(button_string);
+			text.setCharacterSize(16);
+			text.setFillColor(state_style.text_colour);
+			text.setStyle(sf::Text::Regular);
+			text.setPosition(getPosition());
+
+			gui_buttons.push_back(this);
+		};
+
+		inline void update_style() {
+			state_style = button_colours[current_state];
+		}
+
+		inline void SetOnClick(void (*func)(void)) {
+			on_click_function = func;
+		}
+
+		inline void set_state(button_state new_state) {
+			current_state = new_state;
+		}
+
+		inline void update_state() {
+			state_style = cstar::button_colours[current_state];
+		}
+
+		bool window_intersects(const sf::RenderWindow* window) {
+			sf::Vector2<int> mouse_coords = window->mapCoordsToPixel(sf::Vector2f(sf::Mouse::getPosition().x, sf::Mouse::getPosition().y));
+
+			sf::FloatRect mouse_box;
+			mouse_box.width = 1;
+			mouse_box.height = 1;
+			mouse_box.left = mouse_coords.x;
+			mouse_box.top = mouse_coords.y;
+
+			return mesh.getGlobalBounds().intersects(mouse_box);
+		}
+
+		void Tick(const sf::RenderWindow* window, bool clicked) {
+			// Check for intersections
+			if (window_intersects(window)) {
+				std::cout << "Intersecting" << std::endl;
+				if (clicked) {
+					std::cout << "Clicked" << std::endl;
+				}
+				set_state(clicked ? button_state::clicked : button_state::hovered);
+				update_state();
+				update_style();
+				mesh.setFillColor(state_style.fill_colour);
+				text.setFillColor(state_style.text_colour);
+			}
+		}
+
+		virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+			target.draw(mesh, states);
+			target.draw(text, states);
+		}
+
+	private:
+		sf::Text text;
+		sf::RectangleShape mesh;
+		button_state current_state;
+		button_style state_style;
+		void (*on_click_function)(void);
+	};
+
 }
 
 using namespace cstar;
@@ -343,7 +472,7 @@ int main()
 {
 	//Seed random number generator
 	std::srand(std::time(nullptr));
-	
+
 	// Init main window 
 	sf::RenderWindow window;
 	window.create(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Math Asteroids", sf::Style::Close,
@@ -351,14 +480,16 @@ int main()
 		sf::ContextSettings s;
 		s.antialiasingLevel = 4;
 		return s;
-		}()
-		);
+	}());
+
+	sf::RenderWindow* win_ptr = &window;
 
 	// Enable Vsync
 	window.setVerticalSyncEnabled(true);
 
 	font_face.loadFromFile("NimbusRegular.otf");
 
+	// Initialise all GUI stuff on the main menu
 	sf::Text menuTitle;
 	menuTitle.setFont(font_face);
 	menuTitle.setString("MATH ASTEROIDS");
@@ -366,8 +497,16 @@ int main()
 	menuTitle.setFillColor(sf::Color::White);
 	menuTitle.setStyle(sf::Text::Bold);
 	menuTitle.setOrigin(menuTitle.getGlobalBounds().width / 2, menuTitle.getGlobalBounds().height / 2);
-	menuTitle.setPosition(WIN_WIDTH / 2, (WIN_HEIGHT / 2) - menuTitle.getGlobalBounds().height);
+	menuTitle.setPosition(WIN_WIDTH / 2, menuTitle.getGlobalBounds().height / 2);
 
+	// Buttons and their callbacks
+	auto easy_mode_callback = []() -> void { cstar::GameManager::sum_low = 1; cstar::GameManager::sum_high = 15; };
+	Button* easy_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2) - 50), sf::Vector2f(100, 50), "EASY");
+
+	auto hard_mode_callback = []() -> void { cstar::GameManager::sum_low = 5; cstar::GameManager::sum_high = 20; };
+	Button* hard_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2) + 50), sf::Vector2f(100, 50), "HARD");
+
+	// Load player assets
 	sf::Texture ship_texture;
 	ship_texture.loadFromFile("ufo.png");
 	ship_texture.setSmooth(true);
@@ -377,7 +516,7 @@ int main()
 	Spaceship ship;
 	ship.SetSprite(ship_sprite);
 	ship.setPosition(0, 0);
-//	ship_sprite.setPosition(ship.getPosition());
+	//	ship_sprite.setPosition(ship.getPosition());
 	ship.setOrigin(ship.getPosition());
 	//ship.meshPtr->setPosition(WIN_WIDTH / 2, WIN_HEIGHT / 2);
 	ship.scale(10, 10);
@@ -385,7 +524,11 @@ int main()
 	std::string typed_text = std::string();
 	short text_sign = 1;
 
-	for (int i = 0; i < 3; i++) {
+	cstar::button_colours[cstar::button_state::none] = cstar::button_style{ sf::Color::Black, sf::Color::White };
+	cstar::button_colours[cstar::button_state::hovered] = cstar::button_style{ sf::Color::White, sf::Color::Black };
+	cstar::button_colours[cstar::button_state::clicked] = cstar::button_style{ sf::Color::Red, sf::Color::White };
+
+	for (int i = 0; i < 1; i++) {
 		Asteroid* a = new Asteroid();
 		auto w = static_cast<unsigned int>(a->meshPtr->getGlobalBounds().width);
 		auto h = static_cast<unsigned int>(a->meshPtr->getGlobalBounds().height);
@@ -402,6 +545,7 @@ int main()
 
 	// Main event loop
 	while (window.isOpen()) {
+		
 		window.clear();
 		sf::Time currentTime = clock.getElapsedTime(), deltaTimeMS = currentTime - lastTime;
 		lastTime = currentTime;
@@ -409,8 +553,9 @@ int main()
 		// Capture events
 		sf::Event e;
 		float deltaTime = deltaTimeMS.asSeconds();
+		bool gotEvent = window.pollEvent(e);
 		if (!onMenu) {
-			while (window.pollEvent(e)) {
+			while (gotEvent) {
 				if (e.type == sf::Event::EventType::Closed) {
 					window.close(); break;
 
@@ -467,6 +612,7 @@ int main()
 					}
 				}
 				// End of checking the event type
+				gotEvent = window.pollEvent(e);
 			} // End of event polling
 
 			int direction = 0;
@@ -497,28 +643,68 @@ int main()
 			ship.velocity.x = ship.velocity.x - ship.velocity.x * dragFactor;
 			ship.velocity.y = ship.velocity.y - ship.velocity.y * dragFactor;
 
-			//			ship.body->SetLinearVelocity(b2v2(ship.velocity));
-			//			world.Step(deltaTime, 8, 3);
+#if 0
+			for (int i = 1, sz = renderables.size(); i < sz; i++) {
+				auto d = std::sqrt(std::pow(ship.getPosition().x - renderables[i]->getPosition().x, 2) + std::pow(ship.getPosition().y - renderables[i]->getPosition().y, 2));
 
-			// TODO: Fix the really obscure and rare case where the ship can stuck at any of the corners if hit perfectly
+				if (d < (ship.GetRadius() * ship.getScale().x)) {
+					std::cout << "COLLISION TYPE 1" << std::endl;
+					goto collided;
+				}
+
+				for (int j = 0, p = renderables[i]->meshPtr->getPointCount(); i < p - 1; i++) {
+
+					auto perp_dist = perp_distance(renderables[i]->meshPtr->getPoint(j), renderables[i]->meshPtr->getPoint(j + 1), ship.getPosition());
+					if (perp_dist < (ship.GetRadius() * ship.getScale().x)) {
+						std::cout << "COLLISION 2" << std::endl;
+						goto collided;
+					}
+
+				}
+
+			}
+
+		collided:
+#endif
+			// TODO: Fix the extremely rare case where the ship can stuck at any of the corners if hit perfectly
+			//			sf::CircleShape* circle_shape = static_cast<sf::CircleShape*>(ship.meshPtr);
 			for (auto i : renderables) {
 				i->Tick(deltaTime);
-				sf::RectangleShape rect;
-				rect.setSize(sf::Vector2f(2, 2));
-				rect.setPosition(ship.getOrigin());
-				rect.setFillColor(sf::Color::Red);
-				rect.setOutlineColor(sf::Color::White);
-				rect.setOutlineThickness(0.1f);
+				if (i->name == "Asteroid") {
+					/*sf::ConvexShape* convex_shape = static_cast<sf::ConvexShape*>(i->meshPtr);
+					if(sfcollision::check_collision(*circle_shape, *(i->meshPtr))) {
+						std::cout << "Collision!" << std::endl;
+					}
+					*/
+					auto d = std::sqrt(std::pow(ship.getPosition().x - i->getPosition().x, 2) + std::pow(ship.getPosition().y - i->getPosition().y, 2));
+					if (d < ((ship.GetRadius() * ship.getScale().x) + ((ship.meshPtr->getGlobalBounds().width + ship.meshPtr->getGlobalBounds().height) / 2))) {
+						std::cout << "COLLISION" << std::endl;
+					}
+
+				}
+
 				window.draw(*i);
 			}
 		}
 		else { // On menu
 			window.draw(menuTitle);
-		}
 
+			gotEvent = window.pollEvent(e);
+			if (e.type == sf::Event::EventType::Closed) {
+				window.close();
+			}
+
+			for (Button* i : gui_buttons) {
+				i->Tick(win_ptr, sf::Mouse::isButtonPressed(sf::Mouse::Left));
+				window.draw(*i);
+			}
+
+		}
+		
 		window.display();
 	}
 
+	
 	std::cout << "\nQuitting successfully... thank you for playing Math Asteroids! :)" << std::endl;
 	// Exit successfully
 	return 0;
