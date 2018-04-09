@@ -3,9 +3,9 @@
 CC=g++
 #OPT=-O3
 FLAGS=-std=c++17 -g
-FILES=Collision.cpp main.cpp
+FILES=main.cpp Collision.cpp
 OBJ=game
-LIBS=-lsfml-graphics -lsfml-window -lsfml-system -lBox2D
+LIBS=-lsfml-graphics -lsfml-window -lsfml-system
 
 build:
 	$(CC) $(FLAGS) $(OPT) $(FILES) -o $(OBJ) $(LIBS)
