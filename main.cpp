@@ -15,12 +15,8 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Time.hpp>
 
-using std::vector;
-using std::cout;
-using std::printf;
-
 #define array_size(a) (sizeof(a)/sizeof(a[0]))
-#define lerp(a, b, t) ((a * (1-t)) + (b*t))
+#define lerp(a, b, t) (((a * (1 - t)) + (b * t)))
 #define print(ss) std::cout << ss << std::endl
 
 namespace cstar {
@@ -31,21 +27,24 @@ namespace cstar {
 		static unsigned int asteroid_count = 0;
 		static const unsigned int target_asteroid_count = 20;
 		static float asteroid_delay = 0;
-		static const float target_asteroid_delay = 5; // This is in seconds
+		static const float target_asteroid_delay = 3; // This is in seconds
+
 	}
 
 	// Helper function
-	inline short rand_between(short min, short max) { return static_cast<short>(std::rand() % (max + 1) + min); };
+	short rand_between(short min, short max) { return static_cast<short>(std::rand() % (max + 1) + min); };
 
-	inline auto perp_distance(sf::Vector2f line_start, sf::Vector2f line_end, sf::Vector2f point) {
+	auto perp_distance(sf::Vector2f line_start, sf::Vector2f line_end, sf::Vector2f point) {
 		double normalLength = hypot(line_end.x - line_start.x, line_end.y - line_start.y);
 		double distance = (double)((point.x - line_start.x) * (line_end.y - line_start.y) - (point.y - line_start.y) * (line_end.x - line_start.x)) / normalLength;
 		return std::abs(distance);
 	}
 
+#define M_PI (3.14159265)
 #define DEG2RAD (M_PI/180)
 #define RAD2DEG (180/M_PI)
-#define b2v2(vec2) (b2Vec2(vec2.x, vec2.y))
+#define BUTTON_WIDTH (200)
+#define BUTTON_HEIGHT (50)
 
 	// Game constants
 	const int WIN_WIDTH = 600;
@@ -63,91 +62,72 @@ namespace cstar {
 
 	static sf::Font font_face;
 	class MovingEntity : public sf::Transformable, public sf::Drawable {
-		public:
-			explicit MovingEntity(sf::Vector2f initial_vel, sf::Vector2f initial_max_vel, const float accel, MovingEntity* child, std::string _name) :
-				meshPtr(nullptr), velocity(initial_vel), max_velocity(initial_max_vel), acceleration(accel), name(_name) {
+	public:
+		explicit MovingEntity(sf::Vector2f initial_vel, sf::Vector2f initial_max_vel, const float accel, MovingEntity* child, std::string _name) :
+			meshPtr(nullptr), velocity(initial_vel), max_velocity(initial_max_vel), acceleration(accel), name(_name) {
 
-					renderables.push_back(child);
-				};
-			//sf::ConvexShape mesh;
-			sf::Shape* meshPtr;
-			sf::Vector2f velocity;
-			const sf::Vector2f max_velocity;
-			const float acceleration;
-			//b2Body* body;
+			renderables.push_back(child);
+		};
+		//sf::ConvexShape mesh;
+		sf::Shape* meshPtr;
+		sf::Vector2f velocity;
+		const sf::Vector2f max_velocity;
+		const float acceleration;
 
-#if 0
-			void MakeBody() {
-				b2BodyDef bodyDef;
-				bodyDef.type = b2BodyType::b2_dynamicBody;
-				bodyDef.position.Set(getPosition().x / worldScale, getPosition().y / worldScale);
-				body = world.CreateBody(&bodyDef);
+		virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+			states.transform *= getTransform();
+			target.draw(*meshPtr, states);
+		}
 
-				b2PolygonShape polygonShape;
-				polygonShape.SetAsBox(mesh.getLocalBounds().width / 2 / worldScale, mesh.getLocalBounds().height / 2 / worldScale);
-
-				b2FixtureDef fixtureDef;
-				fixtureDef.shape = &polygonShape;
-				fixtureDef.density = 1;
-				fixtureDef.friction = 0.3f;
-				body->CreateFixture(&fixtureDef);
+		virtual void Tick(float deltaTime) {
+			// Velocity clamping
+			if (velocity.x > max_velocity.x) {
+				velocity.x = max_velocity.x;
 			}
+			if (velocity.y > max_velocity.y) {
+				velocity.y = max_velocity.y;
+			}
+
+			// Move object
+			move(velocity * deltaTime);
+#if 0
+			b2Vec2 cur_pos = b2v2(getPosition());
+			cur_pos += b2v2(velocity);
+			cur_pos *= deltaTime;
+			body->SetTransform(cur_pos, getRotation());
+
+			setPosition(body->GetPosition().x * worldScale, body->GetPosition().y * worldScale);
 #endif
 
-			virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
-				states.transform *= getTransform();
-				target.draw(*meshPtr, states);
+			// Bounds checking
+			if (getPosition().y <= 0) {
+				setPosition(getPosition().x, WIN_HEIGHT);
 			}
-
-			virtual void Tick(float deltaTime) {
-				// Velocity clamping
-				if (velocity.x > max_velocity.x) {
-					velocity.x = max_velocity.x;
-				}
-				if (velocity.y > max_velocity.y) {
-					velocity.y = max_velocity.y;
-				}
-
-				// Move object
-				move(velocity * deltaTime);
-#if 0
-				b2Vec2 cur_pos = b2v2(getPosition());
-				cur_pos += b2v2(velocity);
-				cur_pos *= deltaTime;
-				body->SetTransform(cur_pos, getRotation());
-
-				setPosition(body->GetPosition().x * worldScale, body->GetPosition().y * worldScale);
-#endif
-
-				// Bounds checking
-				if (getPosition().y <= 0) {
-					setPosition(getPosition().x, WIN_HEIGHT);
-				}
-				else if (getPosition().y >= WIN_HEIGHT) {
-					setPosition(getPosition().x, 0);
-				}
-				if (getPosition().x <= 0) {
-					setPosition(WIN_WIDTH, getPosition().y);
-				}
-				else if (getPosition().x >= WIN_WIDTH) {
-					setPosition(0, getPosition().y);
-				}
+			else if (getPosition().y >= WIN_HEIGHT) {
+				setPosition(getPosition().x, 0);
 			}
-
-			virtual ~MovingEntity() {
-				std::cout << "Called destructor on " << name << std::endl;
-				delete meshPtr;
-
-				std::find(renderables.begin(), renderables.end(), this) - renderables.begin();
-
-				std::vector<MovingEntity*>::iterator iterator_index = std::find(renderables.begin(),
-						renderables.end(),
-						this);
-
-				renderables.erase(iterator_index);
+			if (getPosition().x <= 0) {
+				setPosition(WIN_WIDTH, getPosition().y);
 			}
+			else if (getPosition().x >= WIN_WIDTH) {
+				setPosition(0, getPosition().y);
+			}
+		}
 
-			std::string name;
+		virtual ~MovingEntity() {
+			std::cout << "Called destructor on " << name << std::endl;
+			delete meshPtr;
+
+			std::find(renderables.begin(), renderables.end(), this) - renderables.begin();
+
+			std::vector<MovingEntity*>::iterator iterator_index = std::find(renderables.begin(),
+				renderables.end(),
+				this);
+
+			renderables.erase(iterator_index);
+		}
+
+		std::string name;
 	};
 
 	class Asteroid;
@@ -155,10 +135,10 @@ namespace cstar {
 
 	//const static std::string operands = "+-*";
 	class Asteroid : public MovingEntity {
-		public:
-			Asteroid() :
-				MovingEntity(sf::Vector2f(0, 0), sf::Vector2f(50, 50), 0.0f, this, "Asteroid"), // Base constructor first
-				answer(0), num_points(rand_between(5, max_points)), text(sf::Text())
+	public:
+		Asteroid() :
+			MovingEntity(sf::Vector2f(0, 0), sf::Vector2f(50, 50), 0.0f, this, "Asteroid"), // Base constructor first
+			answer(0), num_points(rand_between(5, max_points)), text(sf::Text())
 		{
 			sf::ConvexShape* mesh = new sf::ConvexShape();
 			// Muh procedural asteroid generation
@@ -176,15 +156,19 @@ namespace cstar {
 			mesh->setFillColor(sf::Color(0, 0, 0, 0));
 			mesh->setOutlineColor(sf::Color::White);
 			mesh->setOutlineThickness(0.1f);
-			
-			print("Generating between " << GameManager::sum_low << " and " << GameManager::sum_high);
+
 			// Numerals, change to it to have a private member of min and max values
-			short numerals[2] = { rand_between(GameManager::sum_low, GameManager::sum_high), 
-								  rand_between(GameManager::sum_low, GameManager::sum_high) };
-			short randop = rand_between(0, operands.length() - 1);
-			unsigned char operandType(operands.at(randop));
-			answer = [=]() -> int {
-				switch (operandType) {
+			short numerals[2];
+			short randop;
+			unsigned char operand;
+
+			do {
+				numerals[0] = rand_between(GameManager::sum_low, GameManager::sum_high);
+				numerals[1] = rand_between(GameManager::sum_low, GameManager::sum_high);
+				randop = rand_between(0, operands.length() - 1);
+				operand = operands.at(randop);
+				answer = [=]() -> int {
+					switch (operand) {
 					case '+':
 						return numerals[0] + numerals[1];
 						break;
@@ -196,152 +180,161 @@ namespace cstar {
 						break;
 					default:
 						throw std::runtime_error("Unknown operand chosen!");
-				}
-			}();
+					}
+				}();
+			} while ( currently_used_values.find(answer) != currently_used_values.end() );
+
+			currently_used_values[answer] = true;
 
 			meshPtr = mesh;
 
 			asteroid_lut[answer] = this;
 			std::stringstream ss;
-			ss << numerals[0] << ' ' << operandType << ' ' << numerals[1];
+			ss << numerals[0] << ' ' << operand << ' ' << numerals[1];
 			text.setFont(font_face);
 			text.setString(ss.str());
 			text.setCharacterSize(20);
 			text.setFillColor(sf::Color::White);
 			text.setStyle(sf::Text::Regular);
-			
+
+			print("Generated asteroid: " << numerals[0] << " " << operand << " " << numerals[1] << " = " << answer);
+
 			GameManager::asteroid_count++;
 		}
 
-			virtual void Tick(float deltaTime) override {
-				MovingEntity::Tick(deltaTime);
-				text.setPosition(getPosition().x + (meshPtr->getGlobalBounds().width / 2), getPosition().y + (meshPtr->getGlobalBounds().height) + textOffset.y);
-			}
+		virtual void Tick(float deltaTime) override {
+			MovingEntity::Tick(deltaTime);
+			text.setPosition(getPosition().x + (meshPtr->getGlobalBounds().width / 2), getPosition().y + (meshPtr->getGlobalBounds().height) + textOffset.y);
+		}
 
-			virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
-				MovingEntity::draw(target, states);
-				target.draw(text, states);
-			}
+		virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+			MovingEntity::draw(target, states);
+			target.draw(text, states);
+		}
 
-			~Asteroid() {
-				asteroid_lut[answer] = nullptr;
-				cstar::GameManager::asteroid_count--;
-			}
-		private:
-			int answer;
-			static std::string operands;//  = "+-*";
-			const unsigned short max_points = 6;
-			unsigned short num_points;
-			sf::Text text;
-			const sf::Vector2f textOffset = sf::Vector2f(0, 20);
+		~Asteroid() {
+			asteroid_lut[answer] = nullptr;
+			currently_used_values.erase(this->answer);
+			cstar::GameManager::asteroid_count--;
+		}
+	private:
+		int answer;
+		static std::string operands;//  = "+-*";
+		const unsigned short max_points = 6;
+		unsigned short num_points;
+		sf::Text text;
+		const sf::Vector2f textOffset = sf::Vector2f(0, 20);
+		static std::unordered_map<short, bool> currently_used_values;
 	};
 	std::string Asteroid::operands = "+-*";
+	std::unordered_map<short, bool> Asteroid::currently_used_values;
 
 	class Spaceship : public MovingEntity {
-		public:
-			// Spaceship constructor
-			Spaceship() :
-				MovingEntity(sf::Vector2f(0, 0), sf::Vector2f(75, 75), 3.0f, this, "Spaceship"), // Base constructor members
-				rotation_factor(6.0f), health_text(sf::Text()) { // This class's members
+	public:
+		// Spaceship constructor
+		Spaceship() :
+			MovingEntity(sf::Vector2f(0, 0), sf::Vector2f(75, 75), 3.0f, this, "Spaceship"), // Base constructor members
+			rotation_factor(6.0f), health_text(sf::Text()) { // This class's members
 
-					sf::CircleShape* mesh = new sf::CircleShape();
+			sf::CircleShape* mesh = new sf::CircleShape();
 
-					mesh->setRadius(5);
+			mesh->setRadius(5);
 
-#if 0
-					mesh.setPointCount(4);
-					mesh.setPoint(0, sf::Vector2f(1, 0));
-					mesh.setPoint(1, sf::Vector2f(2, 2));
-					mesh.setPoint(2, sf::Vector2f(1, 1.5));
-					mesh.setPoint(3, sf::Vector2f(0, 2));
-#endif
+			mesh->setFillColor(sf::Color::Black);
+			mesh->setOutlineColor(sf::Color::White);
+			mesh->setOutlineThickness(0.1f);
+			mesh->setPosition(0, 0);
+			mesh->setOrigin(mesh->getRadius(), mesh->getRadius());
 
-					mesh->setFillColor(sf::Color::Black);
-					mesh->setOutlineColor(sf::Color::White);
-					mesh->setOutlineThickness(0.1f);
-					mesh->setPosition(0, 0);
-					mesh->setOrigin(mesh->getRadius(), mesh->getRadius());
+			radius = mesh->getRadius();
 
-					radius = mesh->getRadius();
+			meshPtr = mesh;
 
-					meshPtr = mesh;
+			ss.clear();
+			ss << health << ' ' << "HP";
+			health_text.setFont(font_face);
+			health_text.setString(ss.str());
+			health_text.setCharacterSize(20);
+			health_text.setFillColor(sf::Color::White);
+			health_text.setStyle(sf::Text::Regular);
 
-					ss.clear();
-					ss << health << ' ' << "HP";
-					health_text.setFont(font_face);
-					health_text.setString(ss.str());
-					health_text.setCharacterSize(20);
-					health_text.setFillColor(sf::Color::White);
-					health_text.setStyle(sf::Text::Regular);
+			//MakeBody();
+		}
 
-					//MakeBody();
-				}
-
-			virtual void Tick(float deltaTime) override {
-				MovingEntity::Tick(deltaTime);
-				//setOrigin((getPosition().x + meshPtr->getGlobalBounds().width) / 2, (getPosition().y + meshPtr->getGlobalBounds().height) / 2);
-				if (health != prev_health) {
-					ss.str("");
-					ss.clear();
-					ss << health << ' ' << "HP";
-					health_text.setString(ss.str());
-				}
-
-				health_text.setPosition(getPosition().x + (meshPtr->getGlobalBounds().width / 2), getPosition().y + (meshPtr->getGlobalBounds().height) + textOffset.y);
-				this->UpdateSpriteProperties();
+		virtual void Tick(float deltaTime) override {
+			MovingEntity::Tick(deltaTime);
+			//setOrigin((getPosition().x + meshPtr->getGlobalBounds().width) / 2, (getPosition().y + meshPtr->getGlobalBounds().height) / 2);
+			if (health != prev_health) {
+				ss.str("");
+				ss.clear();
+				ss << health << ' ' << "HP";
+				health_text.setString(ss.str());
 			}
 
-			virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+			health_text.setPosition(getPosition().x + (meshPtr->getGlobalBounds().width / 2), getPosition().y + (meshPtr->getGlobalBounds().height) + textOffset.y);
+			this->UpdateSpriteProperties();
+		}
 
-				// Drawing of mesh turned off
-				MovingEntity::draw(target, states);
+		virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
 
-				// Draw sprite and HP
-				target.draw(sprite, states);
-				target.draw(health_text, states);
-			}
+			// Drawing of mesh turned off
+			//MovingEntity::draw(target, states);
 
-			inline void TakeDamage(unsigned short damage) {
-				health -= damage;
-				prev_health = damage;
-			}
+			// Draw sprite and HP
+			target.draw(sprite, states);
+			target.draw(health_text, states);
+		}
 
-			void SetSprite(sf::Sprite& _sprite) {
-				meshPtr->setTexture(_sprite.getTexture());
-				sprite = _sprite;
-				sprite.setOrigin((_sprite.getPosition().x + _sprite.getGlobalBounds().width) / 2, (_sprite.getPosition().y + sprite.getGlobalBounds().height) / 2);
-			}
+		void TakeDamage(float damage) {
+			health -= damage;
+			prev_health = damage;
+		}
 
-			inline void SetSpriteOrigin(const sf::Vector2f origin) {
-				sprite.setOrigin(origin);
-			}
+		void SetSprite(sf::Sprite& _sprite) {
+			meshPtr->setTexture(_sprite.getTexture());
+			sprite = _sprite;
+			sprite.setOrigin((_sprite.getPosition().x + _sprite.getGlobalBounds().width) / 2, (_sprite.getPosition().y + sprite.getGlobalBounds().height) / 2);
+		}
 
-			inline void UpdateSpriteProperties() {
-				sprite.setScale((radius / getScale().x) * 0.75, (radius / getScale().y) * 0.75);
-				sprite.setRotation(getRotation());
-				sprite.setPosition(getPosition());
-			}
+		void SetSpriteOrigin(const sf::Vector2f origin) {
+			sprite.setOrigin(origin);
+		}
 
-			inline short GetRadius() {
-				return radius;
-			}
+		void UpdateSpriteProperties() {
+			sprite.setScale((radius / getScale().x) * 0.75, (radius / getScale().y) * 0.75);
+			sprite.setRotation(getRotation());
+			sprite.setPosition(getPosition());
+		}
 
-			inline auto SetRadius(short rad) {
-				radius = rad;
-				return radius;
-			}
+		short GetRadius() {
+			return radius;
+		}
 
-			~Spaceship() {};
-			static void reset_position();
-			const float rotation_factor;
-		private:
-			short radius;
-			int health = 100;
-			int prev_health = 100;
-			std::stringstream ss;
-			sf::Text health_text;
-			const sf::Vector2f textOffset = sf::Vector2f(20, 20);
-			sf::Sprite sprite;
+		short SetRadius(short rad) {
+			radius = rad;
+			return radius;
+		}
+
+		float GetHealth() {
+			return health;
+		}
+
+		void ResetHealth() {
+			health = 100;
+			prev_health = 100;
+		}
+
+		~Spaceship() {};
+		static void reset_position();
+		const float rotation_factor;
+	private:
+		short radius;
+		float health = 100;
+		float prev_health = 100;
+		std::stringstream ss;
+		sf::Text health_text;
+		const sf::Vector2f textOffset = sf::Vector2f(20, 20);
+		sf::Sprite sprite;
 	};
 
 	struct button_style {
@@ -353,7 +346,7 @@ namespace cstar {
 	class Button;
 	enum class button_state;
 
-	static std::unordered_map<button_state,button_style> button_colours;
+	static std::unordered_map<button_state, button_style> button_colours;
 	static std::vector<Button*> gui_buttons;
 
 	enum class button_state {
@@ -363,82 +356,104 @@ namespace cstar {
 	};
 
 	class Button : public sf::Transformable, public sf::Drawable {
-		public:
-			Button(sf::Vector2f initial_pos, sf::Vector2f initial_scale, std::string button_string) : text(sf::Text()), current_state(cstar::button_state::neither), state_style(), 
+	public:
+		Button(sf::Vector2f initial_pos, sf::Vector2f initial_scale, std::string button_string) : text(sf::Text()), current_state(cstar::button_state::neither), state_style(),
 			on_click_function(nullptr)
 		{
-			
+
 			set_state(button_state::neither);
 			update_style();
-			
+
 			mesh = sf::RectangleShape(initial_scale);
 			mesh.setFillColor(state_style.fill_colour);
 			mesh.setOutlineColor(sf::Color::White);
 			mesh.setOutlineThickness(1);
+			mesh.setPosition(0, 0);
 			mesh.setOrigin(mesh.getGlobalBounds().width / 2, mesh.getGlobalBounds().height / 2);
 			mesh.setPosition(initial_pos);
 
 			text.setFont(font_face);
 			text.setString(sf::String(button_string));
-			text.setCharacterSize(20);
+			text.setCharacterSize(24);
 			text.setFillColor(state_style.text_colour);
 			text.setStyle(sf::Text::Regular);
-			text.setOrigin(text.getGlobalBounds().width / 2, text.getGlobalBounds().height / 2);
+			text.setOrigin(text.getGlobalBounds().width / 2, (text.getGlobalBounds().height / 2) + (text.getCharacterSize() / 2));
 			text.setPosition(mesh.getPosition());
 
 			gui_buttons.push_back(this);
 		};
 
-			inline sf::Text GetText() {
-				return text;
-			}
+		sf::Text GetText() {
+			return text;
+		}
 
-			inline void SetOnClick(void (*func)(void)) {
-				on_click_function = func;
-			}
+		void SetOnClick(void(*func)(void)) {
+			on_click_function = func;
+		}
 
-			inline void set_state(button_state new_state) {
-				current_state = new_state;
-			}
+		void set_state(button_state new_state) {
+			current_state = new_state;
+		}
 
-			inline void update_style() {
-				state_style = cstar::button_colours[current_state];
-			}
+		void update_style() {
+			state_style = cstar::button_colours[current_state];
+		}
 
-			bool window_intersects(const sf::RenderWindow* win) {
+		bool intersects(const sf::RenderWindow* win) {
 
-				sf::FloatRect mouse_box;
-				mouse_box.width = 1;
-				mouse_box.height = 1;
-				mouse_box.left = sf::Mouse::getPosition(*win).x;
-				mouse_box.top = sf::Mouse::getPosition(*win).y;
-				
-				return mouse_box.intersects(mesh.getGlobalBounds());
-			}
+			sf::FloatRect mouse_box;
+			mouse_box.width = 1;
+			mouse_box.height = 1;
+			mouse_box.left = sf::Mouse::getPosition(*win).x;
+			mouse_box.top = sf::Mouse::getPosition(*win).y;
 
-			void Tick(const sf::RenderWindow* win, bool clicked) {
-				// Check for intersections
-				set_state(window_intersects(win) ? (clicked ? button_state::clicked : button_state::hovered) : button_state::neither);
-				if(clicked) {
-					this->on_click_function();
-					print("Clicked on " << text.getString().toAnsiString());
-				}
-				update_style();
-				mesh.setFillColor(state_style.fill_colour);
-				text.setFillColor(state_style.text_colour);
-	
-			}
-			virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
-				target.draw(mesh, states);
-				target.draw(text, states);
-			}
+			return mouse_box.intersects(mesh.getGlobalBounds());
+		}
 
-		private:
-			sf::Text text;
-			sf::RectangleShape mesh;
-			button_state current_state;
-			button_style state_style;
-			void (*on_click_function)(void);
+		void Tick(const sf::RenderWindow* win, bool clicked) {
+			// Check for intersections
+			set_state(intersects(win) ? ((clicked) ? button_state::clicked : button_state::hovered) : button_state::neither);
+			if (current_state == cstar::button_state::clicked) {
+				this->on_click_function();
+			}
+			update_style();
+			mesh.setFillColor(state_style.fill_colour);
+			text.setFillColor(state_style.text_colour);
+		}
+
+		void Tick(const sf::RenderWindow* win, bool holding, bool clicked) {
+			// Check for intersections
+			set_state(intersects(win) ? ((holding) ? button_state::clicked : button_state::hovered) : button_state::neither);
+			if (current_state == cstar::button_state::clicked && clicked) {
+				this->on_click_function();
+			}
+			update_style();
+			mesh.setFillColor(state_style.fill_colour);
+			text.setFillColor(state_style.text_colour);
+		}
+
+		void Tick(const sf::RenderWindow* win, sf::Event e) {
+			// Check for intersections
+			set_state(intersects(win) ? (((e.type == sf::Event::EventType::MouseButtonPressed) && (e.mouseButton.button == sf::Mouse::Left)) ? button_state::clicked : button_state::hovered) : button_state::neither);
+			if (current_state == button_state::clicked) {
+				this->on_click_function();
+			}
+			update_style();
+			mesh.setFillColor(state_style.fill_colour);
+			text.setFillColor(state_style.text_colour);
+		}
+
+		virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+			target.draw(mesh, states);
+			target.draw(text, states);
+		}
+
+	private:
+		sf::Text text;
+		sf::RectangleShape mesh;
+		button_state current_state;
+		button_style state_style;
+		void(*on_click_function)(void);
 	};
 
 }
@@ -454,11 +469,11 @@ int main()
 	// Init main window 
 	sf::RenderWindow window;
 	window.create(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Math Asteroids", sf::Style::Close,
-			[]() -> sf::ContextSettings {
-			sf::ContextSettings s;
-			s.antialiasingLevel = 2;
-			return s;
-			}());
+		[]() -> sf::ContextSettings {
+		sf::ContextSettings s;
+		s.antialiasingLevel = 2;
+		return s;
+	}());
 
 	const sf::RenderWindow* win_ptr = &window;
 
@@ -478,23 +493,36 @@ int main()
 	menuTitle.setPosition(WIN_WIDTH / 2, menuTitle.getGlobalBounds().height / 2);
 
 	// Buttons and their callbacks
-	auto easy_mode_callback = []() -> void { 
-		cstar::GameManager::sum_low = 1; 
-		cstar::GameManager::sum_high = 12; 
+	auto easy_mode_callback = []() -> void {
+		cstar::GameManager::sum_low = 1;
+		cstar::GameManager::sum_high = 20;
 		onMenu = false;
 		print("Easy mode selected.");
 	};
-	Button* easy_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2) - 50), sf::Vector2f(100, 50), "EASY");
+
+	Button* easy_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2) - (BUTTON_HEIGHT)), sf::Vector2f(BUTTON_WIDTH, BUTTON_HEIGHT), "EASY");
 	easy_button->SetOnClick(easy_mode_callback);
 
-	auto hard_mode_callback = []() -> void { 
-		cstar::GameManager::sum_low = 15; 
-		cstar::GameManager::sum_high = 30; 
+	auto hard_mode_callback = []() -> void {
+		cstar::GameManager::sum_low = 20;
+		cstar::GameManager::sum_high = 50;
 		onMenu = false;
 		print("Hard mode selected");
 	};
-	Button* hard_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2) + 50), sf::Vector2f(100, 50), "HARD");
+	Button* hard_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2)), sf::Vector2f(BUTTON_WIDTH, BUTTON_HEIGHT), "HARD");
 	hard_button->SetOnClick(hard_mode_callback);
+
+	auto instructions_callback = []() -> void {
+		system("start chrome https://www.google.com");
+	};
+	Button* instructions_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2) + BUTTON_HEIGHT), sf::Vector2f(BUTTON_WIDTH, BUTTON_HEIGHT), "INSTRUCTIONS");
+	instructions_button->SetOnClick(instructions_callback);
+
+	auto exit_callback = []() -> void {
+		exit(0);
+	};
+	Button* exit_button = new Button(sf::Vector2f(WIN_WIDTH / 2, (WIN_HEIGHT / 2) + (BUTTON_HEIGHT * 2)), sf::Vector2f(BUTTON_WIDTH, BUTTON_HEIGHT), "EXIT");
+	exit_button->SetOnClick(exit_callback);
 
 	// Load player assets
 	sf::Texture ship_texture;
@@ -509,6 +537,7 @@ int main()
 	//	ship_sprite.setPosition(ship.getPosition());
 	ship.setOrigin(ship.getPosition());
 	//ship.meshPtr->setPosition(WIN_WIDTH / 2, WIN_HEIGHT / 2);
+	ship.setPosition(WIN_WIDTH / 2, WIN_HEIGHT / 2);
 	ship.scale(10, 10);
 
 	std::string typed_text = std::string();
@@ -546,12 +575,12 @@ int main()
 		sf::Event e;
 		float deltaTime = deltaTimeMS.asSeconds();
 		if (!onMenu) {
-hansali:
-			if(cstar::GameManager::asteroid_count < cstar::GameManager::target_asteroid_count) {
-				if(cstar::GameManager::asteroid_delay < cstar::GameManager::target_asteroid_delay) {
+			
+			if (cstar::GameManager::asteroid_count < cstar::GameManager::target_asteroid_count) {
+				if (cstar::GameManager::asteroid_delay < cstar::GameManager::target_asteroid_delay) {
 					cstar::GameManager::asteroid_delay += deltaTime;
-				} else  {
-
+				}
+				else {
 					Asteroid* a = new Asteroid();
 					auto w = static_cast<unsigned int>(a->meshPtr->getGlobalBounds().width);
 					auto h = static_cast<unsigned int>(a->meshPtr->getGlobalBounds().height);
@@ -560,7 +589,7 @@ hansali:
 					do {
 						x = std::rand() % (WIN_WIDTH - w) + w;
 						y = std::rand() % (WIN_HEIGHT - h) + h;
-					} while((x == ship.getPosition().x) || (y == ship.getPosition().y));
+					} while ((x == ship.getPosition().x) || (y == ship.getPosition().y));
 					a->setPosition(x, y);
 					a->scale(5, 5);
 					a->velocity = sf::Vector2f(rand_between(-50, 50), rand_between(-50, 50));
@@ -598,7 +627,7 @@ hansali:
 						if (asteroid_lut.find(sum) != asteroid_lut.end()) {
 							auto asteroid = asteroid_lut[sum];
 							auto angle = atan2((asteroid->getPosition().y + asteroid->velocity.y) - ship.getPosition().y,
-									(asteroid->getPosition().x + asteroid->velocity.x) - ship.getPosition().x) * RAD2DEG;
+								(asteroid->getPosition().x + asteroid->velocity.x) - ship.getPosition().x) * RAD2DEG;
 
 							ship.setRotation(angle + 90);
 
@@ -608,72 +637,93 @@ hansali:
 						// shoot at meme with sum on it
 						std::cout << "Shot at " << sum << std::endl; // This current throws an error!
 					}
+					else if (e.key.code == sf::Keyboard::Escape) {
+						onMenu = true;
+						ship.ResetHealth();
+					}
 				}
 				// End of checking the event type
 			} // End of event polling
+			
+			if (ship.GetHealth() >= 0) {
 
-			int direction = 0;
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
-				direction = 1;
-			}
-			else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
-				direction = -1;
-			}
-			ship.rotate(direction * ship.rotation_factor);
+				int direction = 0;
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
+					direction = 1;
+				}
+				else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
+					direction = -1;
+				}
+				ship.rotate(direction * ship.rotation_factor);
 
-			if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
-				float abs_rotation = ship.getRotation();
+				if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
+					float abs_rotation = ship.getRotation();
 
-				// Create a normalized vector in the direction of travel
-				float xN = static_cast<float>(sin(2 * M_PI * (abs_rotation / 360)));
-				float yN = static_cast<float>(cos(2 * M_PI * (abs_rotation / 360)));
+					// Create a normalized vector in the direction of travel
+					float xN = static_cast<float>(sin(2 * M_PI * (abs_rotation / 360)));
+					float yN = static_cast<float>(cos(2 * M_PI * (abs_rotation / 360)));
 
-				// Add to velocity vector (using minus for y because of coordinate system)
-				ship.velocity.x += xN * ship.acceleration;
-				ship.velocity.y -= yN * ship.acceleration;
-			}
-
-			// Drag or wind or some shit
-			const float dragFactor = 0.01;
-
-			// Use Stokes' law to apply drag to the ship
-			ship.velocity.x = ship.velocity.x - ship.velocity.x * dragFactor;
-			ship.velocity.y = ship.velocity.y - ship.velocity.y * dragFactor;
-
-			// TODO: Fix the extremely rare case where the ship can stuck at any of the corners if hit perfectly
-			//	sf::CircleShape* circle_shape = static_cast<sf::CircleShape*>(ship.meshPtr);
-			for (auto i : renderables) {
-				i->Tick(deltaTime);
-				if (i->name == "Asteroid") {
-					auto d = std::sqrt(std::pow(ship.getPosition().x - i->getPosition().x, 2) + std::pow(ship.getPosition().y - i->getPosition().y, 2));
-					if (d < ((ship.GetRadius() * ship.getScale().x) + ((ship.meshPtr->getGlobalBounds().width + ship.meshPtr->getGlobalBounds().height) / 2))) {
-						std::cout << "COLLISION" << std::endl;
-					}
-
+					// Add to velocity vector (using minus for y because of coordinate system)
+					ship.velocity.x += xN * ship.acceleration;
+					ship.velocity.y -= yN * ship.acceleration;
 				}
 
-				window.draw(*i);
+				// Drag or wind or some shit
+				const float dragFactor = 0.01;
+
+				// Use Stokes' law to apply drag to the ship
+				ship.velocity.x = ship.velocity.x - ship.velocity.x * dragFactor;
+				ship.velocity.y = ship.velocity.y - ship.velocity.y * dragFactor;
+
+				// TODO: Fix the extremely rare case where the ship can stuck at any of the corners if hit perfectly
+				//	sf::CircleShape* circle_shape = static_cast<sf::CircleShape*>(ship.meshPtr);
+				for (auto i : renderables) {
+					i->Tick(deltaTime);
+					if (i->name == "Asteroid") {
+						auto d = std::sqrt(std::pow(ship.getPosition().x - i->getPosition().x, 2) + std::pow(ship.getPosition().y - i->getPosition().y, 2));
+						if (d < ((ship.GetRadius() * ship.getScale().x) - ((ship.meshPtr->getGlobalBounds().width + ship.meshPtr->getGlobalBounds().height) / 2))) {
+							//std::cout << "COLLISION" << std::endl;
+							ship.TakeDamage(0.25f);
+						}
+
+					}
+					window.draw(*i);
+				}
+			}
+			else {
+				window.draw(ship);
+				onMenu = true;
+				ship.ResetHealth();
 			}
 		}
 		else { // On menu
 			window.draw(menuTitle);
+			bool t = false;
 			while (window.pollEvent(e)) {
 				if (e.type == sf::Event::EventType::Closed) {
 					window.close(); break;
 				} // End of checking the event type
+				if (e.type == sf::Event::EventType::MouseButtonReleased) {
+					if (e.mouseButton.button == sf::Mouse::Left) {
+						t = true;
+					}
+				}
 			} // End of event polling
-			
+
 			for (auto i : gui_buttons) {
-				i->Tick(win_ptr, sf::Mouse::isButtonPressed(sf::Mouse::Button::Left));
+				//i->Tick(win_ptr, sf::Mouse::isButtonPressed(sf::Mouse::Left), ((e.type == sf::Event::EventType::MouseButtonReleased) && (e.mouseButton.button == sf::Mouse::Left)));
+				//i->Tick(win_ptr, e);
+				//print(t);
+				i->Tick(win_ptr, sf::Mouse::isButtonPressed(sf::Mouse::Left), true);
 				window.draw(*i);
 			}
 
 		}
-		
+
 		window.display();
 	}
 
-	
+
 	std::cout << "\nQuitting successfully... thank you for playing Math Asteroids! :)" << std::endl;
 	// Exit successfully
 	return 0;
